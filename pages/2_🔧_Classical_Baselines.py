@@ -129,15 +129,21 @@ else:
 
 st.header("2. Predictions vs Actuals (Validation Set)")
 available_models = [k for k in models if not k.startswith("_")]
+if "Naive" not in available_models:
+    available_models.append("Naive")
 if available_models:
     selected_model = st.selectbox("Select model", available_models)
-    model = models[selected_model]
+    model = models.get(selected_model)
 
     X_val = val_data["X_val"]
     Y_val = val_data["Y_val"]
     val_dates_for_plot = val_data["val_dates"][WINDOW:]
 
-    Y_pred_pca = model.predict(X_val)
+    if selected_model == "Naive":
+        # Persistence baseline in PCA space: copy the last step from each input window.
+        Y_pred_pca = X_val[:, -N_PCA:]
+    else:
+        Y_pred_pca = model.predict(X_val)
     Y_val_orig = denormalize(pca_reducer.inverse_transform(Y_val), scaler)
     Y_pred_orig = denormalize(pca_reducer.inverse_transform(Y_pred_pca), scaler)
 
@@ -179,7 +185,11 @@ if available_models:
         height=450,
         hovermode="x unified",
     )
-    st.plotly_chart(fig_pred, use_container_width=True)
+    st.plotly_chart(
+        fig_pred,
+        use_container_width=True,
+        key=f"val_series_{selected_model}_{col_sel_mat}_{col_sel_ten}",
+    )
 
     residuals = Y_val_orig[:, col_idx] - Y_pred_orig[:, col_idx]
     c1, c2, c3 = st.columns(3)
@@ -194,7 +204,7 @@ if available_models:
         title=f"{selected_model} - MAE by Surface Cell",
         colorscale="Reds",
     )
-    st.plotly_chart(fig_err, use_container_width=True)
+    st.plotly_chart(fig_err, use_container_width=True, key=f"val_error_grid_{selected_model}")
 else:
     st.info("No trained classical models found.")
 
@@ -207,7 +217,7 @@ if (TRAINED_DIR / "ridge_future_prices.npy").exists():
     col_a, col_b = st.columns(2)
     with col_a:
         fig_last = plot_surface_heatmap(prices[-1], title="Last Known", zmin=prices.min(), zmax=prices.max())
-        st.plotly_chart(fig_last, use_container_width=True)
+        st.plotly_chart(fig_last, use_container_width=True, key=f"ridge_last_{day_idx}")
     with col_b:
         fig_pred_day = plot_surface_heatmap(
             future_prices[day_idx],
@@ -215,7 +225,7 @@ if (TRAINED_DIR / "ridge_future_prices.npy").exists():
             zmin=prices.min(),
             zmax=prices.max(),
         )
-        st.plotly_chart(fig_pred_day, use_container_width=True)
+        st.plotly_chart(fig_pred_day, use_container_width=True, key=f"ridge_pred_{day_idx}")
 else:
     st.info("Run `python notebooks/02_classical_baselines.py` to generate ridge forecasts.")
 
@@ -236,7 +246,7 @@ if (TRAINED_DIR / "naive_future_prices.npy").exists():
     col_a, col_b = st.columns(2)
     with col_a:
         fig_last = plot_surface_heatmap(prices[-1], title="Last Known", zmin=prices.min(), zmax=prices.max())
-        st.plotly_chart(fig_last, use_container_width=True)
+        st.plotly_chart(fig_last, use_container_width=True, key=f"naive_last_{day_idx}")
     with col_b:
         fig_naive = plot_surface_heatmap(
             naive_future[day_idx],
@@ -244,6 +254,6 @@ if (TRAINED_DIR / "naive_future_prices.npy").exists():
             zmin=prices.min(),
             zmax=prices.max(),
         )
-        st.plotly_chart(fig_naive, use_container_width=True)
+        st.plotly_chart(fig_naive, use_container_width=True, key=f"naive_pred_{day_idx}")
 else:
     st.info("Naive forecast artifact not found (`naive_future_prices.npy`).")
