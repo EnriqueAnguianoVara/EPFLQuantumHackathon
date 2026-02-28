@@ -242,6 +242,19 @@ val_targets_pca = val_pca[WINDOW:]
 val_targets_norm = pca_reducer.inverse_transform(val_targets_pca)
 val_targets_prices = denormalize(val_targets_norm, scaler)
 
+
+def extract_r2(metrics_dict):
+    if "R2" in metrics_dict:
+        return metrics_dict["R2"]
+    if "R²" in metrics_dict:
+        return metrics_dict["R²"]
+    if "RÂ²" in metrics_dict:
+        return metrics_dict["RÂ²"]
+    for k, v in metrics_dict.items():
+        if str(k).startswith("R"):
+            return v
+    return float("nan")
+
 try:
     t0 = time.time()
     qkgp = QuantumKernelGP(
@@ -262,9 +275,7 @@ try:
     qkgp_val_norm = pca_reducer.inverse_transform(qkgp_val_pca)
     qkgp_val_prices = denormalize(qkgp_val_norm, scaler)
     qkgp_m = all_metrics(val_targets_prices, qkgp_val_prices)
-    qkgp_r2 = qkgp_m.get("R2")
-    if qkgp_r2 is None:
-        qkgp_r2 = next((v for k, v in qkgp_m.items() if str(k).startswith("R")), float("nan"))
+    qkgp_r2 = extract_r2(qkgp_m)
     qkgp_future_pca, qkgp_future_std = qkgp.predict_rolling(all_pca, n_steps=6, return_std=True)
     qkgp_future_norm = pca_reducer.inverse_transform(qkgp_future_pca)
     qkgp_future_prices = denormalize(qkgp_future_norm, scaler)
@@ -292,9 +303,7 @@ try:
     qrlstm_future_prices = qrlstm.forecast_future_surfaces(6)
     qrlstm_val_pred_prices, qrlstm_val_true_prices = qrlstm.get_validation_surfaces()
     qrlstm_m = all_metrics(qrlstm_val_true_prices, qrlstm_val_pred_prices)
-    qrlstm_r2 = qrlstm_m.get("R2")
-    if qrlstm_r2 is None:
-        qrlstm_r2 = next((v for k, v in qrlstm_m.items() if str(k).startswith("R")), float("nan"))
+    qrlstm_r2 = extract_r2(qrlstm_m)
     np.save(TRAINED_DIR / "qrlstm_future_prices.npy", qrlstm_future_prices)
     np.save(TRAINED_DIR / "qrlstm_val_prices.npy", qrlstm_val_pred_prices)
     extra_summary["QRLSTM"] = {
