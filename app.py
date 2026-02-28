@@ -1,121 +1,97 @@
 """
-Quantum Swaptions — Home Page
-
-Streamlit entry point for the Quandela EPFL Hackathon 2026 challenge.
+Submission-ready Streamlit home page for judges.
 """
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
 
 import streamlit as st
 
+
+ROOT = Path(__file__).resolve().parent
+TRAINED_DIR = ROOT / "trained_models"
+
+
+def _safe_load_json(path: Path):
+    if not path.exists():
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _best_forecast_model():
+    rows = []
+
+    baselines = _safe_load_json(TRAINED_DIR / "baselines_summary.json") or {}
+    for k, v in baselines.items():
+        mae = v.get("MAE")
+        if mae is not None:
+            rows.append((k.replace("_", " ").title(), float(mae)))
+
+    qrc_ablation = _safe_load_json(TRAINED_DIR / "qrc_ablation.json") or []
+    valid = [r for r in qrc_ablation if "error" not in r and "orig_MAE" in r]
+    if valid:
+        rows.append(("QRC", float(min(valid, key=lambda r: r["orig_MAE"])["orig_MAE"])))
+
+    extra_q = _safe_load_json(TRAINED_DIR / "quantum_extra_summary.json") or {}
+    for name in ("QKGP", "QRLSTM"):
+        item = extra_q.get(name, {})
+        if item.get("status") == "ok" and "val_MAE" in item:
+            rows.append((name, float(item["val_MAE"])))
+
+    if not rows:
+        return None, None
+    best = min(rows, key=lambda x: x[1])
+    return best[0], best[1]
+
+
 st.set_page_config(
-    page_title="Quantum Swaptions",
+    page_title="Quantum Swaptions - Judge Presentation",
     page_icon="⚛️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ── Sidebar ──────────────────────────────────────────────────────────────
-st.sidebar.markdown("## ⚛️ Quantum Swaptions")
-st.sidebar.markdown("**Quandela × MILA × AMF**")
-st.sidebar.markdown("EPFL Hackathon 2026")
-st.sidebar.divider()
-st.sidebar.markdown("Navigate using the pages above ☝️")
+st.title("⚛️ Quantum Swaptions - Judge Presentation")
+st.caption("EPFL/Quandela challenge submission view.")
 
-# ── Main content ─────────────────────────────────────────────────────────
-st.title("⚛️ Quantum Swaptions Pricing")
-st.markdown("### Predicting Interest Rate Derivatives with Photonic Quantum Computing")
+st.sidebar.markdown("## Judge Navigation")
+st.sidebar.markdown("Use pages in order: 1 → 2 → 3 → 5 → 6")
 
-st.divider()
+col_a, col_b, col_c = st.columns(3)
+col_a.metric("Dataset", "494 x 224")
+col_b.metric("Forecast Horizon", "6 days")
+col_c.metric("Missing Imputations", "2 dates")
 
-col1, col2 = st.columns([3, 2])
+best_name, best_mae = _best_forecast_model()
+if best_name is not None:
+    st.success(f"Current best validation MAE (official workflow): {best_name} ({best_mae:.6f})")
 
-with col1:
-    st.markdown(
-        """
-        #### The Challenge
+st.markdown("### What judges should review")
+st.markdown(
+    """
+1. **Market Explorer**: data structure and volatility surface behavior.
+2. **Classical Baselines**: Ridge/XGBoost/LSTM/Naive reference.
+3. **Quantum Approaches**: QRC, QKGP, QRLSTM, QAE analysis.
+4. **Comparison**: side-by-side metrics and auxiliary RW sanity check (non-official).
+5. **Predictions**: final 6-day forecast surfaces and submission output.
+"""
+)
 
-        Swaptions — options on interest rate swaps — are central to risk management
-        and derivatives trading. Their prices form a **volatility surface** that evolves
-        daily across 14 tenors and 16 maturities (224 price points per day).
-
-        We tackle two tasks:
-
-        **1. Predict future swaption prices** (6 trading days ahead)
-
-        **2. Impute missing data** in the historical surface
-
-        #### Our Approach
-
-        We combine **photonic quantum circuits** (via Quandela's MerLin & Perceval)
-        with classical time-series methods in a hybrid architecture:
-
-        - **Quantum Reservoir Computing** — fixed photonic circuits as non-linear feature extractors
-        - **Quantum Autoencoder** — a quantum bottleneck learns a compressed representation of the volatility surface
-        - **Classical Baselines** — Ridge, XGBoost, LSTM for rigorous comparison
-        """
-    )
-
-with col2:
-    st.markdown(
-        """
-        #### Architecture Overview
-
-        ```
-        ┌─────────────────────┐
-        │  Swaption Surface   │
-        │  494 days × 224 pts │
-        └────────┬────────────┘
-                 │
-            ┌────▼────┐
-            │ Encoder │ (classical)
-            │ 224 → 6 │
-            └────┬────┘
-                 │
-          ┌──────▼──────┐
-          │  Quantum    │
-          │  Bottleneck │ (MerLin)
-          │  6 modes    │
-          │  3 photons  │
-          └──────┬──────┘
-                 │
-            ┌────▼────┐
-            │ Decoder │ (classical)
-            │ → 224   │
-            └────┬────┘
-                 │
-          ┌──────▼──────┐
-          │  Temporal   │
-          │  Predictor  │
-          └─────────────┘
-        ```
-        """
-    )
-
-st.divider()
-
-# Key numbers
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Training Days", "494")
-c2.metric("Surface Points", "224")
-c3.metric("Future Predictions", "6 days")
-c4.metric("Missing Imputations", "2 days")
-
-st.divider()
+st.markdown("### Submission notes")
+st.info(
+    "Primary benchmark results are based on the official challenge workflow. "
+    "RW-based analysis is shown only as auxiliary sanity check."
+)
 
 st.markdown(
     """
-    #### Navigation
-
-    Use the sidebar to explore each section:
-
-    | Page | Description |
-    |------|-------------|
-    | 📊 **Market Explorer** | Interactive visualization of the swaption surface and dataset |
-    | 🔧 **Classical Baselines** | Ridge, XGBoost, LSTM and Naive benchmark results |
-    | ⚛️ **Quantum Approaches** | QRC, QKGP, QRLSTM and Quantum vs Classical autoencoder |
-    | 📈 **Comparison** | Head-to-head quantum vs classical evaluation |
-    | 🎯 **Predictions** | Final results and submission download |
-
-    ---
-    *Built with [Quandela MerLin](https://www.quandela.com/) & [Perceval](https://perceval.quandela.net/)*
-    """
+---
+Built for presentation clarity: concise metrics, interpretable plots, and direct traceability to generated artifacts.
+"""
 )
