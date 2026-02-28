@@ -103,18 +103,17 @@ st.divider()
 
 st.markdown(
     """
-    #### 📍 Navigation
+    #### Navigation
 
     Use the sidebar to explore each section:
 
     | Page | Description |
     |------|-------------|
-    | 📊 **Market Explorer** | Interactive visualisation of the swaption surface and dataset |
-    | 🔧 **Classical Baselines** | Ridge, XGBoost, LSTM benchmark results |
-    | ⚛️ **Quantum Reservoir** | Photonic reservoir computing with MerLin |
-    | 🧬 **Quantum Autoencoder** | Quantum bottleneck autoencoder for surface compression |
+    | 📊 **Market Explorer** | Interactive visualization of the swaption surface and dataset |
+    | 🔧 **Classical Baselines** | Ridge, XGBoost, LSTM and Naive benchmark results |
+    | ⚛️ **Quantum Approaches** | QRC, QKGP, QRLSTM and Quantum vs Classical autoencoder |
     | 📈 **Comparison** | Head-to-head quantum vs classical evaluation |
-    | 🎯 **Predictions** | Final results and Excel download |
+    | 🎯 **Predictions** | Final results and submission download |
 
     ---
     *Built with [Quandela MerLin](https://www.quandela.com/) & [Perceval](https://perceval.quandela.net/)*

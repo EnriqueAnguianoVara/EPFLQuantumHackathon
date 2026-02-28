@@ -1,10 +1,9 @@
 """
-📈 Comparison — Head-to-head evaluation of all models.
+Model comparison page.
 """
 
 import sys
 import json
-import pickle
 from pathlib import Path
 
 import numpy as np
@@ -15,10 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.data.loader import load_all
-from src.data.preprocessing import normalize, pca_reduce, denormalize, create_flat_windows
-from src.evaluation.metrics import all_metrics, surface_error_grid
-from src.utils.surface import plot_surface_heatmap
+from src.data.loader import load_all, TENORS, MATURITY_LABELS
+from src.utils.surface import plot_surface_heatmap, flat_to_grid
 
 st.set_page_config(page_title="Model Comparison", page_icon="📈", layout="wide")
 TRAINED_DIR = ROOT / "trained_models"
@@ -27,172 +24,201 @@ data = load_all(ROOT / "data")
 prices = data["train_prices"]
 
 st.title("📈 Model Comparison")
-st.markdown("Head-to-head evaluation of classical baselines vs quantum models.")
+st.markdown("Head-to-head evaluation of classical and quantum approaches.")
 
-# ── Load all available metrics ───────────────────────────────────────────
+
+def _extract_r2(metrics: dict) -> float:
+    if "R2" in metrics:
+        return metrics["R2"]
+    if "R²" in metrics:
+        return metrics["R²"]
+    if "RÂ²" in metrics:
+        return metrics["RÂ²"]
+    for k, v in metrics.items():
+        if str(k).startswith("R"):
+            return v
+    return np.nan
+
+
 results = {}
 
 if (TRAINED_DIR / "baselines_summary.json").exists():
     with open(TRAINED_DIR / "baselines_summary.json") as f:
         baselines = json.load(f)
-    for name, metrics in baselines.items():
-        results[name.capitalize()] = metrics
+    for name, m in baselines.items():
+        results[name.replace("_", " ").title()] = {
+            "MAE": m.get("MAE", np.nan),
+            "RMSE": m.get("RMSE", np.nan),
+            "R2": _extract_r2(m),
+        }
 
 if (TRAINED_DIR / "qrc_ablation.json").exists():
     with open(TRAINED_DIR / "qrc_ablation.json") as f:
         ablation = json.load(f)
-    best_qrc = min([r for r in ablation if "error" not in r], key=lambda r: r["orig_MAE"])
-    results["QRC"] = {
-        "MAE": best_qrc["orig_MAE"],
-        "RMSE": best_qrc["orig_RMSE"],
-        "R²": best_qrc["orig_R2"],
-    }
+    valid = [r for r in ablation if "error" not in r]
+    if valid:
+        best_qrc = min(valid, key=lambda r: r["orig_MAE"])
+        results["QRC"] = {
+            "MAE": best_qrc.get("orig_MAE", np.nan),
+            "RMSE": best_qrc.get("orig_RMSE", np.nan),
+            "R2": best_qrc.get("orig_R2", np.nan),
+        }
 
+if (TRAINED_DIR / "quantum_extra_summary.json").exists():
+    with open(TRAINED_DIR / "quantum_extra_summary.json") as f:
+        extra_q = json.load(f)
+    for name in ("QKGP", "QRLSTM"):
+        item = extra_q.get(name, {})
+        if item.get("status") == "ok":
+            results[name] = {
+                "MAE": item.get("val_MAE", np.nan),
+                "RMSE": item.get("val_RMSE", np.nan),
+                "R2": item.get("val_R2", np.nan),
+            }
+
+ae_comp = {}
 if (TRAINED_DIR / "autoencoder_comparison.json").exists():
     with open(TRAINED_DIR / "autoencoder_comparison.json") as f:
         ae_comp = json.load(f)
     if "quantum" in ae_comp:
         results["QAE"] = {
-            "MAE": ae_comp["quantum"]["reconstruction_val_MAE"],
-            "RMSE": ae_comp["quantum"]["reconstruction_val_RMSE"],
-            "R²": ae_comp["quantum"]["reconstruction_val_R2"],
+            "MAE": ae_comp["quantum"].get("reconstruction_val_MAE", np.nan),
+            "RMSE": ae_comp["quantum"].get("reconstruction_val_RMSE", np.nan),
+            "R2": ae_comp["quantum"].get("reconstruction_val_R2", np.nan),
         }
     if "classical" in ae_comp:
         results["Classical AE"] = {
-            "MAE": ae_comp["classical"]["reconstruction_val_MAE"],
-            "RMSE": ae_comp["classical"]["reconstruction_val_RMSE"],
-            "R²": ae_comp["classical"]["reconstruction_val_R2"],
+            "MAE": ae_comp["classical"].get("reconstruction_val_MAE", np.nan),
+            "RMSE": ae_comp["classical"].get("reconstruction_val_RMSE", np.nan),
+            "R2": ae_comp["classical"].get("reconstruction_val_R2", np.nan),
         }
 
 if not results:
     st.warning("No model results found. Run the training notebooks first.")
     st.stop()
 
-# ── Section 1: Metrics table ─────────────────────────────────────────────
-st.header("1. Validation Metrics (Original Price Space)")
+forecast_models = [
+    "Ridge",
+    "Naive Persistence",
+    "Xgboost",
+    "Lstm",
+    "QRC",
+    "QKGP",
+    "QRLSTM",
+]
+ae_models = ["QAE", "Classical AE"]
 
 df_results = pd.DataFrame(results).T
 df_results.index.name = "Model"
-
-# Ensure consistent columns
-for col in ["MAE", "RMSE", "R²"]:
+for col in ["MAE", "RMSE", "R2"]:
     if col not in df_results.columns:
         df_results[col] = np.nan
 
+df_forecast = df_results.loc[[m for m in forecast_models if m in df_results.index]].copy()
+df_ae = df_results.loc[[m for m in ae_models if m in df_results.index]].copy()
+
+st.header("1. Forecast Metrics")
+st.caption("Only 1-step-ahead forecasting models are compared here.")
 st.dataframe(
-    df_results[["MAE", "RMSE", "R²"]].style.format({
+    df_forecast[["MAE", "RMSE", "R2"]].style.format({
         "MAE": "{:.6f}",
         "RMSE": "{:.6f}",
-        "R²": "{:.6f}",
+        "R2": "{:.6f}",
     }).highlight_min(axis=0, subset=["MAE", "RMSE"], color="#2d5a27")
-    .highlight_max(axis=0, subset=["R²"], color="#2d5a27"),
+    .highlight_max(axis=0, subset=["R2"], color="#2d5a27"),
     use_container_width=True,
 )
 
-# Bar chart
 import plotly.graph_objects as go
 
-model_names = list(results.keys())
-mae_vals = [results[m].get("MAE", 0) for m in model_names]
-r2_vals = [results[m].get("R²", 0) for m in model_names]
+model_names = list(df_forecast.index)
+mae_vals = [df_forecast.loc[m, "MAE"] for m in model_names]
+r2_vals = [df_forecast.loc[m, "R2"] for m in model_names]
+one_minus_r2_vals = [max(1e-8, 1.0 - float(v)) for v in r2_vals]
 
 col1, col2 = st.columns(2)
-
 with col1:
     fig_mae = go.Figure(go.Bar(
         x=model_names, y=mae_vals,
-        marker_color=["#FF6B35" if "Q" not in m and "quantum" not in m.lower()
-                       else "#7030A0" for m in model_names],
+        marker_color=["#FF6B35" if "Q" not in m and "Quantum" not in m else "#7030A0" for m in model_names],
     ))
-    fig_mae.update_layout(title="MAE by Model", yaxis_title="MAE", height=400)
+    fig_mae.update_layout(title="MAE by Model", yaxis_title="MAE", height=380)
     st.plotly_chart(fig_mae, use_container_width=True)
 
 with col2:
     fig_r2 = go.Figure(go.Bar(
         x=model_names, y=r2_vals,
-        marker_color=["#FF6B35" if "Q" not in m and "quantum" not in m.lower()
-                       else "#7030A0" for m in model_names],
+        marker_color=["#FF6B35" if "Q" not in m and "Quantum" not in m else "#7030A0" for m in model_names],
     ))
-    fig_r2.update_layout(title="R² by Model", yaxis_title="R²", height=400)
+    fig_r2.update_layout(
+        title="R2 by Model (zoomed)",
+        yaxis_title="R2",
+        yaxis=dict(range=[max(0.9, min(r2_vals) - 0.01), 1.001]),
+        height=380,
+    )
     st.plotly_chart(fig_r2, use_container_width=True)
 
-st.markdown(
-    "🟣 **Purple** = Quantum models &nbsp;&nbsp; 🟠 **Orange** = Classical models"
+fig_gap = go.Figure(go.Bar(
+    x=model_names,
+    y=one_minus_r2_vals,
+    marker_color=["#FF6B35" if "Q" not in m and "Quantum" not in m else "#7030A0" for m in model_names],
+))
+fig_gap.update_layout(
+    title="1 - R2 by Model (lower is better, log scale)",
+    yaxis_title="1 - R2",
+    yaxis_type="log",
+    height=360,
 )
+st.plotly_chart(fig_gap, use_container_width=True)
 
-# ── Section 2: Quantum vs Classical bottleneck ────────────────────────────
-st.header("2. Quantum vs Classical Bottleneck (Autoencoder)")
-
-if (TRAINED_DIR / "autoencoder_comparison.json").exists():
-    q_mae = ae_comp["quantum"]["reconstruction_val_MAE"]
-    c_mae = ae_comp["classical"]["reconstruction_val_MAE"]
-
-    col_a, col_b, col_c = st.columns(3)
-    col_a.metric("Quantum MAE", f"{q_mae:.6f}")
-    col_b.metric("Classical MAE", f"{c_mae:.6f}")
-
-    if q_mae < c_mae:
-        diff = (c_mae - q_mae) / c_mae * 100
-        col_c.metric("Quantum Advantage", f"{diff:.1f}%", delta=f"-{diff:.1f}%")
-    else:
-        diff = (q_mae - c_mae) / c_mae * 100
-        col_c.metric("Classical Advantage", f"{diff:.1f}%", delta=f"+{diff:.1f}%")
-
-    st.markdown(
-        "Both autoencoders share identical architecture (encoder: 224→64→16→6, "
-        "decoder: 8→16→64→224). The only difference is the bottleneck: "
-        "QuantumLayer + LexGrouping vs Linear + Tanh."
+st.header("2. Autoencoder Reconstruction Metrics")
+st.caption("Separate task: surface reconstruction, not temporal forecasting.")
+if not df_ae.empty:
+    st.dataframe(
+        df_ae[["MAE", "RMSE", "R2"]].style.format({
+            "MAE": "{:.6f}",
+            "RMSE": "{:.6f}",
+            "R2": "{:.6f}",
+        }).highlight_min(axis=0, subset=["MAE", "RMSE"], color="#2d5a27")
+        .highlight_max(axis=0, subset=["R2"], color="#2d5a27"),
+        use_container_width=True,
     )
+else:
+    st.info("Autoencoder comparison artifact not found.")
 
-# ── Section 3: Future prediction comparison ───────────────────────────────
-st.header("3. Future Predictions Comparison")
-
+st.header("3. Future Prediction Surfaces")
 future_files = {
     "Ridge": "ridge_future_prices.npy",
     "QRC": "qrc_future_prices.npy",
     "QAE": "qae_future_prices.npy",
+    "QKGP": "qkgp_future_prices.npy",
+    "QRLSTM": "qrlstm_future_prices.npy",
+    "Naive": "naive_future_prices.npy",
 }
-
 future_preds = {}
 for name, fname in future_files.items():
-    path = TRAINED_DIR / fname
-    if path.exists():
-        future_preds[name] = np.load(path)
+    p = TRAINED_DIR / fname
+    if p.exists():
+        future_preds[name] = np.load(p)
 
 if future_preds:
-    future_dates = ["24/12/2051", "26/12/2051", "27/12/2051",
-                    "29/12/2051", "30/12/2051", "01/01/2052"]
+    future_dates = ["24/12/2051", "26/12/2051", "27/12/2051", "29/12/2051", "30/12/2051", "01/01/2052"]
+    day = st.selectbox("Select day", range(6), format_func=lambda i: future_dates[i])
 
-    day = st.selectbox("Select day", range(6),
-                       format_func=lambda i: future_dates[i])
-
-    n_models = len(future_preds)
-    cols = st.columns(min(n_models + 1, 4))
-
-    # Last known
+    cols = st.columns(min(len(future_preds) + 1, 4))
     with cols[0]:
-        st.markdown("**Last Known**")
-        fig = plot_surface_heatmap(prices[-1], title="23/12/2051",
-                                   zmin=prices.min(), zmax=prices.max())
+        fig = plot_surface_heatmap(prices[-1], title="Last Known", zmin=prices.min(), zmax=prices.max())
         st.plotly_chart(fig, use_container_width=True)
 
     for i, (name, pred) in enumerate(future_preds.items()):
         col_idx = (i + 1) % len(cols)
         with cols[col_idx]:
-            st.markdown(f"**{name}**")
-            fig = plot_surface_heatmap(pred[day], title=name,
-                                       zmin=prices.min(), zmax=prices.max())
+            fig = plot_surface_heatmap(pred[day], title=name, zmin=prices.min(), zmax=prices.max())
             st.plotly_chart(fig, use_container_width=True)
 
-    # Divergence between models
     if len(future_preds) >= 2:
-        st.subheader("Model Agreement")
-        all_preds = np.stack(list(future_preds.values()))  # (n_models, 6, 224)
-        std_across = all_preds[:, day, :].std(axis=0)  # (224,) std per cell
-
-        from src.utils.surface import flat_to_grid
-        from src.data.loader import TENORS, MATURITY_LABELS
-
+        all_preds = np.stack(list(future_preds.values()))
+        std_across = all_preds[:, day, :].std(axis=0)
         std_grid = flat_to_grid(std_across)
         fig_std = go.Figure(go.Heatmap(
             z=std_grid,
@@ -202,24 +228,12 @@ if future_preds:
             colorbar=dict(title="Std Dev"),
         ))
         fig_std.update_layout(
-            title=f"Prediction Disagreement — {future_dates[day]}",
-            xaxis_title="Maturity", yaxis_title="Tenor",
+            title=f"Prediction Disagreement - {future_dates[day]}",
+            xaxis_title="Maturity",
+            yaxis_title="Tenor",
             yaxis=dict(autorange="reversed"),
-            height=400,
+            height=380,
         )
         st.plotly_chart(fig_std, use_container_width=True)
-
-        st.markdown(
-            "Higher values (red) indicate cells where models disagree the most. "
-            "Low disagreement suggests higher confidence in the prediction."
-        )
-
-# ── Section 4: Ensemble info ─────────────────────────────────────────────
-st.header("4. Ensemble Configuration")
-
-if (TRAINED_DIR / "final_summary.json").exists():
-    with open(TRAINED_DIR / "final_summary.json") as f:
-        summary = json.load(f)
-    st.json(summary)
 else:
-    st.info("Run `python notebooks/05_final_predictions.py` to generate ensemble results.")
+    st.info("No future prediction artifacts found.")

@@ -85,6 +85,17 @@ if (TRAINED_DIR / "qae_future_prices.npy").exists():
     future_predictions["QAE"] = np.load(TRAINED_DIR / "qae_future_prices.npy")
     print(f"  QAE: {future_predictions['QAE'].shape}")
 
+# QKGP
+if (TRAINED_DIR / "qkgp_future_prices.npy").exists():
+    future_predictions["QKGP"] = np.load(TRAINED_DIR / "qkgp_future_prices.npy")
+    print(f"  QKGP: {future_predictions['QKGP'].shape}")
+
+# QRLSTM
+if (TRAINED_DIR / "qrlstm_future_prices.npy").exists():
+    future_predictions["QRLSTM"] = np.load(TRAINED_DIR / "qrlstm_future_prices.npy")
+    print(f"  QRLSTM: {future_predictions['QRLSTM'].shape}")
+
+
 if not future_predictions:
     print("  ⚠ No predictions found! Run notebooks 02-04 first.")
     sys.exit(1)
@@ -98,40 +109,119 @@ print("\n" + "=" * 60)
 print("  3. ENSEMBLE FUTURE PREDICTIONS")
 print("=" * 60)
 
-# Use validation data to find optimal weights
+# Use validation data to calibrate ensemble weights
 split_idx = int(len(prices) * (1 - config["val_ratio"]))
 val_prices = prices[split_idx:]
 
-# Build validation predictions from each model (1-step on val set)
+from src.data.preprocessing import create_flat_windows
+
+val_norm, _ = normalize(val_prices, scaler)
+val_pca, _ = pca_reduce(val_norm, reducer=pca_reducer)
+X_val, Y_val = create_flat_windows(val_pca, window_size=WINDOW, horizon=1)
+Y_val_norm = pca_reducer.inverse_transform(Y_val)
+Y_val_prices = denormalize(Y_val_norm, scaler)
+
 val_predictions = {}
 
-# Ridge
+# Ridge validation predictions
 if (TRAINED_DIR / "ridge_model.pkl").exists():
     with open(TRAINED_DIR / "ridge_model.pkl", "rb") as f:
         ridge = pickle.load(f)
-    from src.data.preprocessing import create_flat_windows
-    val_norm, _ = normalize(val_prices, scaler)
-    val_pca, _ = pca_reduce(val_norm, reducer=pca_reducer)
-    X_val, Y_val = create_flat_windows(val_pca, window_size=WINDOW, horizon=1)
     ridge_val_pca = ridge.predict(X_val)
     ridge_val_norm = pca_reducer.inverse_transform(ridge_val_pca)
     val_predictions["Ridge"] = denormalize(ridge_val_norm, scaler)
 
-# For QRC and QAE, use their future predictions directly (no val split available easily)
-# We'll use simple mean for the ensemble
+# QRC validation predictions
+if (TRAINED_DIR / "qrc_model.pkl").exists():
+    from src.models.quantum.reservoir import QuantumReservoir
+
+    with open(TRAINED_DIR / "qrc_model.pkl", "rb") as f:
+        qrc_save = pickle.load(f)
+
+    qcfg = qrc_save["config"]
+    qrc_val_model = QuantumReservoir(
+        n_modes=qcfg["n_modes"],
+        n_photons=qcfg["n_photons"],
+        n_pca=qcfg["n_pca"],
+        window_size=qcfg["window_size"],
+        encoding=qcfg.get("encoding", "last"),
+        readout_alpha=qcfg.get("readout_alpha", 1.0),
+        seed=qcfg.get("seed", 42),
+    )
+    qrc_val_model.readout = qrc_save["readout"]
+    qrc_val_model.is_fitted = True
+
+    qrc_val_features = qrc_val_model.extract_all_features(val_pca, verbose=False)
+    qrc_val_pca = qrc_val_model.predict(qrc_val_features)
+    qrc_val_norm = pca_reducer.inverse_transform(qrc_val_pca)
+    val_predictions["QRC"] = denormalize(qrc_val_norm, scaler)
+
+# QAE validation predictions
+if (
+    (TRAINED_DIR / "temporal_model.pkl").exists()
+    and (TRAINED_DIR / "q_autoencoder_weights.pt").exists()
+    and (TRAINED_DIR / "latent_vectors.npy").exists()
+):
+    import torch
+    from src.models.quantum.autoencoder import QuantumAutoencoder
+
+    with open(TRAINED_DIR / "temporal_model.pkl", "rb") as f:
+        temporal = pickle.load(f)
+
+    Z_all = np.load(TRAINED_DIR / "latent_vectors.npy")
+    Z_val = Z_all[split_idx:]
+
+    Z_val_pred = []
+    for t in range(WINDOW, len(Z_val)):
+        z_pred = temporal.predict(Z_val[t - WINDOW : t])
+        Z_val_pred.append(z_pred)
+
+    if len(Z_val_pred) > 0:
+        q_ae = QuantumAutoencoder(
+            input_dim=224,
+            pre_quantum_dim=6,
+            n_modes=6,
+            n_photons=3,
+            latent_dim=8,
+        )
+        q_ae.load_state_dict(
+            torch.load(str(TRAINED_DIR / "q_autoencoder_weights.pt"), map_location="cpu", weights_only=True)
+        )
+        q_ae.eval()
+
+        with torch.no_grad():
+            z_tensor = torch.tensor(np.array(Z_val_pred), dtype=torch.float32)
+            qae_val_norm = q_ae.decode(z_tensor).numpy()
+        val_predictions["QAE"] = denormalize(qae_val_norm, scaler)
+
+# QKGP validation predictions (precomputed in notebook 03)
+if (TRAINED_DIR / "qkgp_val_prices.npy").exists():
+    qkgp_val_prices = np.load(TRAINED_DIR / "qkgp_val_prices.npy")
+    if qkgp_val_prices.shape == Y_val_prices.shape:
+        val_predictions["QKGP"] = qkgp_val_prices
+
+# QRLSTM validation predictions (precomputed in notebook 03)
+if (TRAINED_DIR / "qrlstm_val_prices.npy").exists():
+    qrlstm_val_prices = np.load(TRAINED_DIR / "qrlstm_val_prices.npy")
+    if qrlstm_val_prices.shape == Y_val_prices.shape:
+        val_predictions["QRLSTM"] = qrlstm_val_prices
+
+# Keep only models available in both validation and future predictions
+usable_val_predictions = {
+    name: pred for name, pred in val_predictions.items()
+    if name in future_predictions and pred.shape == Y_val_prices.shape
+}
 
 ensemble = Ensemble(method="mean")
-if val_predictions:
-    Y_val_norm = pca_reducer.inverse_transform(Y_val)
-    Y_val_prices = denormalize(Y_val_norm, scaler)
-    # Only optimize if we have >1 model with val predictions
-    if len(val_predictions) > 1:
-        ensemble = Ensemble(method="optimal")
-        ensemble.fit(val_predictions, Y_val_prices)
-    else:
-        ensemble.weights = {name: 1.0 / len(future_predictions) for name in future_predictions}
-        ensemble.model_names = list(future_predictions.keys())
-        ensemble.is_fitted = True
+if len(usable_val_predictions) >= 2:
+    ensemble = Ensemble(method="optimal")
+    ensemble.fit(usable_val_predictions, Y_val_prices)
+elif len(usable_val_predictions) == 1:
+    only_model = next(iter(usable_val_predictions.keys()))
+    ensemble.weights = {name: 0.0 for name in future_predictions}
+    ensemble.weights[only_model] = 1.0
+    ensemble.model_names = list(future_predictions.keys())
+    ensemble.is_fitted = True
 else:
     ensemble.weights = {name: 1.0 / len(future_predictions) for name in future_predictions}
     ensemble.model_names = list(future_predictions.keys())
@@ -185,45 +275,63 @@ for idx in test_info["missing_indices"]:
     pca_interp = denormalize(pca_interp_norm, scaler)[0]
 
     # Method 2: Direct price interpolation
-    direct_interp = 0.5 * (prices[i_before] + prices[i_after])
+    direct_interp = 0.5 * (prices[i_before] + prices[i_after])    # Method 3: QAE masked latent optimization (if available)
+    known_values = pd.to_numeric(test_df.iloc[idx, 2:], errors="coerce").values.astype(float)
+    known_mask = mask.astype(bool)
 
-    # Method 3: QAE latent interpolation (if available)
-    if (TRAINED_DIR / "latent_vectors.npy").exists():
+    if (
+        (TRAINED_DIR / "latent_vectors.npy").exists()
+        and (TRAINED_DIR / "temporal_model.pkl").exists()
+        and (TRAINED_DIR / "q_autoencoder_weights.pt").exists()
+    ):
         Z_all = np.load(TRAINED_DIR / "latent_vectors.npy")
         import torch
-        from src.models.quantum.autoencoder import QuantumAutoencoder
+        from src.models.quantum.autoencoder import QuantumAutoencoder, SwaptionPredictor
+
+        with open(TRAINED_DIR / "temporal_model.pkl", "rb") as f:
+            temporal = pickle.load(f)
+
         q_ae = QuantumAutoencoder(
-            input_dim=224, pre_quantum_dim=6,
-            n_modes=6, n_photons=3, latent_dim=8,
+            input_dim=224,
+            pre_quantum_dim=6,
+            n_modes=6,
+            n_photons=3,
+            latent_dim=8,
         )
         q_ae.load_state_dict(
-            torch.load(str(TRAINED_DIR / "q_autoencoder_weights.pt"),
-                       map_location="cpu", weights_only=True)
+            torch.load(str(TRAINED_DIR / "q_autoencoder_weights.pt"), map_location="cpu", weights_only=True)
         )
         q_ae.eval()
-        z_qae = 0.5 * (Z_all[i_before] + Z_all[i_after])
-        with torch.no_grad():
-            qae_interp_norm = q_ae.decode(
-                torch.tensor(z_qae, dtype=torch.float32).unsqueeze(0)
-            ).numpy()
-        qae_interp = denormalize(qae_interp_norm, scaler)[0]
-        # Ensemble: average PCA + direct + QAE
-        imputed_full = (pca_interp + direct_interp + qae_interp) / 3.0
+
+        predictor_qae = SwaptionPredictor(
+            autoencoder=q_ae,
+            temporal_predictor=temporal,
+            device="cpu",
+        )
+
+        known_values_norm = np.zeros(224, dtype=np.float32)
+        known_values_norm[known_mask] = (
+            (known_values[known_mask] - scaler.mean[known_mask])
+            / scaler.std[known_mask]
+        )
+
+        z_init = 0.5 * (Z_all[i_before] + Z_all[i_after])
+        qae_masked_norm = predictor_qae.impute_masked(
+            known_values=known_values_norm,
+            known_mask=known_mask,
+            z_init=z_init,
+            n_steps=700,
+            lr=0.02,
+        )
+        qae_masked = denormalize(qae_masked_norm.reshape(1, -1), scaler)[0]
+        imputed_full = qae_masked
     else:
-        # Average PCA + direct
+        # Fallback: average PCA + direct interpolation
         imputed_full = (pca_interp + direct_interp) / 2.0
 
-    # For known values, keep the originals from test template
-    # For missing values, use our imputation
-    known_values = test_df.iloc[idx, 2:].values  # skip 'type' and 'date'
-    final_surface = np.zeros(224)
-    for j in range(224):
-        if mask[j]:
-            # Known value — keep it
-            final_surface[j] = float(known_values[j])
-        else:
-            # Missing — use imputation
-            final_surface[j] = imputed_full[j]
+    # Keep observed values and fill only missing ones
+    final_surface = imputed_full.copy()
+    final_surface[known_mask] = known_values[known_mask]
 
     imputed_missing[idx] = final_surface
 
