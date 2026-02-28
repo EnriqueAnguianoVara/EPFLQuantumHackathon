@@ -71,13 +71,14 @@ print("=" * 60)
 ablation_results = []
 
 configs = [
-    {"n_modes": 6,  "n_photons": 2},
-    {"n_modes": 6,  "n_photons": 3},
-    {"n_modes": 8,  "n_photons": 2},
-    {"n_modes": 8,  "n_photons": 3},
-    {"n_modes": 8,  "n_photons": 4},
-    {"n_modes": 10, "n_photons": 3},
-    {"n_modes": 10, "n_photons": 4},
+    {"n_modes": 6,  "n_photons": 2, "encoding": "last"},
+    {"n_modes": 6,  "n_photons": 2, "encoding": "flatten"},
+    {"n_modes": 6,  "n_photons": 3, "encoding": "last"},
+    {"n_modes": 6,  "n_photons": 3, "encoding": "flatten"},
+    {"n_modes": 8,  "n_photons": 3, "encoding": "last"},
+    {"n_modes": 8,  "n_photons": 3, "encoding": "flatten"},
+    {"n_modes": 10, "n_photons": 4, "encoding": "last"},
+    {"n_modes": 10, "n_photons": 4, "encoding": "flatten"},
 ]
 
 best_model = None
@@ -86,8 +87,9 @@ best_mae = float("inf")
 for cfg in configs:
     n_modes = cfg["n_modes"]
     n_photons = cfg["n_photons"]
+    encoding = cfg["encoding"]
 
-    print(f"\n  --- n_modes={n_modes}, n_photons={n_photons} ---")
+    print(f"\n  --- n_modes={n_modes}, n_photons={n_photons}, encoding={encoding} ---")
 
     try:
         t0 = time.time()
@@ -97,7 +99,7 @@ for cfg in configs:
             n_photons=n_photons,
             n_pca=N_PCA,
             window_size=WINDOW,
-            encoding="last",
+            encoding=encoding,
             readout_alpha=1.0,
             seed=42,
         )
@@ -134,6 +136,7 @@ for cfg in configs:
         result = {
             "n_modes": n_modes,
             "n_photons": n_photons,
+            "encoding": encoding,
             "q_output_size": qrc.q_output_size,
             "pca_MAE": m_pca["MAE"],
             "pca_R2": m_pca["R²"],
@@ -163,16 +166,16 @@ for cfg in configs:
 
 # Print summary table
 print("\n  " + "-" * 70)
-print(f"  {'Modes':>5} {'Photons':>7} {'Fock dim':>8} {'MAE':>10} {'R²':>8} {'Time':>8}")
+print(f"  {'Modes':>5} {'Photons':>7} {'Enc':>8} {'Fock dim':>8} {'MAE':>10} {'R2':>8} {'Time':>8}")
 print("  " + "-" * 70)
 for r in ablation_results:
     if "error" in r:
-        print(f"  {r['n_modes']:>5} {r['n_photons']:>7} {'ERROR':>8}")
+        print(f"  {r['n_modes']:>5} {r['n_photons']:>7} {r.get('encoding', '-'):>8} {'ERROR':>8}")
     else:
-        print(f"  {r['n_modes']:>5} {r['n_photons']:>7} {r['q_output_size']:>8} "
+        print(f"  {r['n_modes']:>5} {r['n_photons']:>7} {r['encoding']:>8} {r['q_output_size']:>8} "
               f"{r['orig_MAE']:>10.6f} {r['orig_R2']:>8.4f} {r['time_seconds']:>7.1f}s")
 
-print(f"\n  ★ Best: n_modes={best_config['n_modes']}, n_photons={best_config['n_photons']}")
+print(f"\n  Best: n_modes={best_config['n_modes']}, n_photons={best_config['n_photons']}, encoding={best_config['encoding']}")
 
 # ══════════════════════════════════════════════════════════════════════════
 # 3. Memory capacity of best reservoir

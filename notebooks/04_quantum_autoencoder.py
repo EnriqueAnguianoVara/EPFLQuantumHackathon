@@ -258,18 +258,30 @@ for idx in test_info["missing_indices"]:
     if train_dates_parsed[i_before] > train_dates_parsed[i_after]:
         i_before, i_after = i_after, i_before
 
-    # Method 1: Latent space interpolation
-    surface_interp_norm = predictor.impute_interpolation(Z_all, i_before, i_after)
-    surface_interp = denormalize(surface_interp_norm.reshape(1, -1), scaler)[0]
+    # Masked latent optimization using known points from the template
+    known_values_raw = pd.to_numeric(test_df.iloc[idx, 2:], errors="coerce").values.astype(float)
+    known_mask = mask.astype(bool)
 
-    # Method 2: Masked optimization (uses known values)
-    known_norm = all_norm[i_before].copy()  # Use neighbor as approximate known
-    # Get actual known values from test template
-    test_prices = test_df.iloc[idx, 2:].values  # skip type and date cols... adjust as needed
-    # We use the interpolated z as initialization
+    known_values_norm = np.zeros(224, dtype=np.float32)
+    known_values_norm[known_mask] = (
+        (known_values_raw[known_mask] - scaler.mean[known_mask])
+        / scaler.std[known_mask]
+    )
+
     z_init = 0.5 * (Z_all[i_before] + Z_all[i_after])
+    surface_masked_norm = predictor.impute_masked(
+        known_values=known_values_norm,
+        known_mask=known_mask,
+        z_init=z_init,
+        n_steps=700,
+        lr=0.02,
+    )
+    surface_masked = denormalize(surface_masked_norm.reshape(1, -1), scaler)[0]
 
-    imputed_surfaces[idx] = surface_interp
+    # Keep observed values exactly and only fill missing entries
+    final_surface = surface_masked.copy()
+    final_surface[known_mask] = known_values_raw[known_mask]
+    imputed_surfaces[idx] = final_surface
 
     n_missing = int((~mask).sum())
     print(f"  Date {missing_date}: {n_missing} missing values imputed")

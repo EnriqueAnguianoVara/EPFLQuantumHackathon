@@ -23,7 +23,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.data.loader import load_all
-from src.data.preprocessing import full_pipeline, normalize, pca_reduce, denormalize
+from src.data.preprocessing import (
+    full_pipeline,
+    normalize,
+    pca_reduce,
+    denormalize,
+    create_flat_windows,
+)
 from src.evaluation.metrics import all_metrics, surface_error_grid
 from src.models.classical.ridge import RidgeBaseline
 from src.models.classical.xgboost_model import GBTBaseline
@@ -124,6 +130,15 @@ Y_val_original = denormalize(Y_val_norm, scaler)
 ridge_metrics_original = all_metrics(Y_val_original, Y_pred_original)
 print(f"\n  Metrics in ORIGINAL price space:")
 for k, v in ridge_metrics_original.items():
+    print(f"    {k}: {v:.6f}")
+
+# Naive persistence baseline (copy last PCA step in the window)
+naive_val_pca = X_val[:, -N_PCA:]
+naive_val_norm = pca_reducer.inverse_transform(naive_val_pca)
+naive_val_original = denormalize(naive_val_norm, scaler)
+naive_metrics_original = all_metrics(Y_val_original, naive_val_original)
+print(f"\n  Naive persistence metrics (ORIGINAL price space):")
+for k, v in naive_metrics_original.items():
     print(f"    {k}: {v:.6f}")
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -235,26 +250,61 @@ except ImportError as e:
     lstm_metrics_original = None
 
 # ══════════════════════════════════════════════════════════════════════════
-# 5. Rolling predictions (6 future days)
+# 5. Direct multi-horizon predictions (6 future days)
 # ══════════════════════════════════════════════════════════════════════════
 print("\n" + "=" * 60)
-print("  5. ROLLING PREDICTIONS (6 future days)")
+print("  5. DIRECT MULTI-HORIZON PREDICTIONS (6 future days)")
 print("=" * 60)
 
 # Use all data to predict 6 days ahead
 all_norm, _ = normalize(prices, scaler)
 all_pca_full, _ = pca_reduce(all_norm, reducer=pca_reducer)
 
-# Ridge rolling
-ridge_future_pca = best_ridge.predict_rolling(all_pca_full, n_steps=6, window_size=WINDOW, n_pca=N_PCA)
+# Train a direct 6-step ridge model (no rolling recursion)
+FUTURE_STEPS = 6
+X_direct, Y_direct = create_flat_windows(all_pca_full, window_size=WINDOW, horizon=FUTURE_STEPS)
+
+split_direct = max(1, int(len(X_direct) * 0.85))
+X_direct_train, X_direct_val = X_direct[:split_direct], X_direct[split_direct:]
+Y_direct_train, Y_direct_val = Y_direct[:split_direct], Y_direct[split_direct:]
+
+best_direct_alpha = None
+best_direct_mae = float("inf")
+
+for alpha in [0.01, 0.1, 1.0, 10.0, 100.0]:
+    model = RidgeBaseline(alpha=alpha)
+    model.fit(X_direct_train, Y_direct_train)
+    pred = model.predict(X_direct_val)
+    mae = np.mean(np.abs(Y_direct_val - pred))
+    print(f"  Direct alpha={alpha:6.2f} | PCA MAE={mae:.6f}")
+    if mae < best_direct_mae:
+        best_direct_mae = mae
+        best_direct_alpha = alpha
+
+direct_ridge = RidgeBaseline(alpha=best_direct_alpha)
+direct_ridge.fit(X_direct, Y_direct)
+print(f"  Selected direct alpha: {best_direct_alpha}")
+
+x_last = all_pca_full[-WINDOW:].flatten()
+ridge_future_pca = direct_ridge.predict(x_last).reshape(FUTURE_STEPS, N_PCA)
 ridge_future_norm = pca_reducer.inverse_transform(ridge_future_pca)
 ridge_future_prices = denormalize(ridge_future_norm, scaler)
 print(f"  Ridge future predictions shape: {ridge_future_prices.shape}")
 print(f"  Ridge future price range: [{ridge_future_prices.min():.4f}, {ridge_future_prices.max():.4f}]")
 
-# Save rolling predictions
+# Naive future baseline (persistence)
+naive_future_pca = np.repeat(all_pca_full[-1:].copy(), FUTURE_STEPS, axis=0)
+naive_future_norm = pca_reducer.inverse_transform(naive_future_pca)
+naive_future_prices = denormalize(naive_future_norm, scaler)
+print(f"  Naive future price range: [{naive_future_prices.min():.4f}, {naive_future_prices.max():.4f}]")
+
+# Save direct predictions (keep legacy filenames for downstream compatibility)
 np.save(TRAINED_DIR / "ridge_future_pca.npy", ridge_future_pca)
 np.save(TRAINED_DIR / "ridge_future_prices.npy", ridge_future_prices)
+np.save(TRAINED_DIR / "ridge_direct_future_pca.npy", ridge_future_pca)
+np.save(TRAINED_DIR / "ridge_direct_future_prices.npy", ridge_future_prices)
+np.save(TRAINED_DIR / "naive_future_pca.npy", naive_future_pca)
+np.save(TRAINED_DIR / "naive_future_prices.npy", naive_future_prices)
 
 # ══════════════════════════════════════════════════════════════════════════
 # 6. Missing data imputation (2 dates)
@@ -314,6 +364,7 @@ print("  7. SUMMARY — Validation Metrics (original price space)")
 print("=" * 60)
 
 summary = {"ridge": ridge_metrics_original}
+summary["naive_persistence"] = naive_metrics_original
 if xgb_metrics_original:
     summary["xgboost"] = xgb_metrics_original
 if lstm_metrics_original:
@@ -330,3 +381,4 @@ with open(TRAINED_DIR / "baselines_summary.json", "w") as f:
     json.dump(summary, f, indent=2)
 print(f"\n  Saved baselines_summary.json ✓")
 print("\n  ✅ Phase 2 complete!")
+
