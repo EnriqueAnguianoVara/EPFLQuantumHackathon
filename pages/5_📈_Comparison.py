@@ -248,17 +248,39 @@ for name, fname in future_files.items():
 if future_preds:
     future_dates = ["24/12/2051", "26/12/2051", "27/12/2051", "29/12/2051", "30/12/2051", "01/01/2052"]
     day = st.selectbox("Select day", range(6), format_func=lambda i: future_dates[i])
+    all_models = list(future_preds.keys())
+    models_to_show = st.multiselect(
+        "Models to display",
+        all_models,
+        default=all_models,
+    )
+    charts_per_row = st.radio(
+        "Charts per row",
+        [2, 3],
+        horizontal=True,
+        index=1,
+    )
 
-    cols = st.columns(min(len(future_preds) + 1, 4))
-    with cols[0]:
-        fig = plot_surface_heatmap(prices[-1], title="Last Known", zmin=prices.min(), zmax=prices.max())
-        st.plotly_chart(fig, use_container_width=True)
+    surfaces = [("Last Known", prices[-1])]
+    for name in models_to_show:
+        surfaces.append((name, future_preds[name][day]))
 
-    for i, (name, pred) in enumerate(future_preds.items()):
-        col_idx = (i + 1) % len(cols)
-        with cols[col_idx]:
-            fig = plot_surface_heatmap(pred[day], title=name, zmin=prices.min(), zmax=prices.max())
-            st.plotly_chart(fig, use_container_width=True)
+    for row_start in range(0, len(surfaces), charts_per_row):
+        row_items = surfaces[row_start : row_start + charts_per_row]
+        cols = st.columns(charts_per_row)
+        for i, (name, surface) in enumerate(row_items):
+            with cols[i]:
+                fig = plot_surface_heatmap(
+                    surface,
+                    title=name,
+                    zmin=prices.min(),
+                    zmax=prices.max(),
+                )
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True,
+                    key=f"future_surface_{day}_{name}_{row_start+i}",
+                )
 
     if len(future_preds) >= 2:
         all_preds = np.stack(list(future_preds.values()))
