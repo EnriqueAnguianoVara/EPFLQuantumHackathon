@@ -134,6 +134,7 @@ import plotly.graph_objects as go
 model_names = list(df_forecast.index)
 mae_vals = [df_forecast.loc[m, "MAE"] for m in model_names]
 r2_vals = [df_forecast.loc[m, "R2"] for m in model_names]
+one_minus_r2_vals = [max(1e-8, 1.0 - float(v)) for v in r2_vals]
 
 col1, col2 = st.columns(2)
 with col1:
@@ -149,8 +150,26 @@ with col2:
         x=model_names, y=r2_vals,
         marker_color=["#FF6B35" if "Q" not in m and "Quantum" not in m else "#7030A0" for m in model_names],
     ))
-    fig_r2.update_layout(title="R2 by Model", yaxis_title="R2", height=380)
+    fig_r2.update_layout(
+        title="R2 by Model (zoomed)",
+        yaxis_title="R2",
+        yaxis=dict(range=[max(0.9, min(r2_vals) - 0.01), 1.001]),
+        height=380,
+    )
     st.plotly_chart(fig_r2, use_container_width=True)
+
+fig_gap = go.Figure(go.Bar(
+    x=model_names,
+    y=one_minus_r2_vals,
+    marker_color=["#FF6B35" if "Q" not in m and "Quantum" not in m else "#7030A0" for m in model_names],
+))
+fig_gap.update_layout(
+    title="1 - R2 by Model (lower is better, log scale)",
+    yaxis_title="1 - R2",
+    yaxis_type="log",
+    height=360,
+)
+st.plotly_chart(fig_gap, use_container_width=True)
 
 st.header("2. Autoencoder Reconstruction Metrics")
 st.caption("Separate task: surface reconstruction, not temporal forecasting.")
