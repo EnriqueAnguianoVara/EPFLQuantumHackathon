@@ -372,3 +372,12 @@ else:
         "No RW auxiliary summary found. Run:\n"
         "`python scripts/evaluate_vs_rw.py --rw-file \"C:\\Users\\jorge\\Downloads\\rw_6days.xlsx\"`"
     )
+
+st.header("5. Takeaways for Judges")
+st.markdown(
+    """
+1. **Classical baselines are strong on the official benchmark**, so improvements must be interpreted against a high-performance reference.
+2. **Quantum approaches are not uniform**: QRLSTM is highly competitive, while QRC/QKGP contribute complementary behavior and model diversity.
+3. **RW diagnostics validate methodology, not leaderboard ranking**: official conclusions are based on challenge data, with RW used as auxiliary sanity check.
+"""
+)

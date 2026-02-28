@@ -120,7 +120,7 @@ if "_summary" in models:
             "MAPE (%)": "{:.2f}",
             "R²": "{:.6f}",
             "Max Error": "{:.6f}",
-        }).highlight_min(axis=0, subset=[c for c in ["MAE", "RMSE", "Max Error"] if c in cols], color="#2d5a27")
+        }).highlight_min(axis=0, subset=[c for c in ["MAE", "RMSE", "MAPE (%)", "Max Error"] if c in cols], color="#2d5a27")
         .highlight_max(axis=0, subset=[c for c in ["R²"] if c in cols], color="#2d5a27"),
         use_container_width=True,
     )
