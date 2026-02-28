@@ -21,7 +21,7 @@ from src.evaluation.metrics import surface_error_grid
 from src.models.classical.lstm import LSTMBaseline
 from src.utils.surface import plot_surface_heatmap
 
-st.set_page_config(page_title="Classical Baselines", page_icon="🔧", layout="wide")
+st.set_page_config(page_title="Classical Baselines", layout="wide")
 
 TRAINED_DIR = ROOT / "trained_models"
 
@@ -66,7 +66,7 @@ def load_models(n_pca: int, window_size: int):
 
 
 if not (TRAINED_DIR / "scalers.pkl").exists():
-    st.title("🔧 Classical Baselines")
+    st.title("Classical Baselines")
     st.warning("No trained models found. Run `python notebooks/02_classical_baselines.py`.")
     st.stop()
 
@@ -98,7 +98,7 @@ def prepare_val():
 
 val_data = prepare_val()
 
-st.title("🔧 Classical Baselines")
+st.title("Classical Baselines")
 st.markdown(
     "Benchmark models in PCA space (6 components) with 20-day lookback and 1-step forecast."
 )

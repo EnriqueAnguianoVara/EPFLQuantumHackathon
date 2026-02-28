@@ -17,13 +17,13 @@ if str(ROOT) not in sys.path:
 from src.data.loader import load_all, TENORS, MATURITY_LABELS
 from src.utils.surface import plot_surface_heatmap, flat_to_grid
 
-st.set_page_config(page_title="Model Comparison", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Model Comparison", layout="wide")
 TRAINED_DIR = ROOT / "trained_models"
 
 data = load_all(ROOT / "data")
 prices = data["train_prices"]
 
-st.title("📈 Model Comparison")
+st.title("Model Comparison")
 st.markdown("Head-to-head evaluation of classical and quantum approaches.")
 
 
@@ -304,10 +304,10 @@ if future_preds:
 else:
     st.info("No future prediction artifacts found.")
 
-st.header("4. Auxiliary RW Validation (non-official)")
-st.caption(
-    "This section compares forecasts against synthetic RW future surfaces. "
-    "It is an additional sanity check and not part of the official benchmark."
+st.header("4. Auxiliary RW Validation")
+st.info(
+    "Primary benchmark results are based on the official challenge workflow. "
+    "RW-based analysis is shown only as auxiliary sanity check."
 )
 
 rw_summary_path = TRAINED_DIR / "rw_validation_summary.json"
@@ -318,7 +318,7 @@ if rw_summary_path.exists():
     rw_results = rw_summary.get("results", {})
     if rw_results:
         df_rw = pd.DataFrame(rw_results).T
-        for col in ["MAE", "RMSE", "R2", "MAE_ratio_vs_naive", "MAE_delta_vs_naive"]:
+        for col in ["MAE", "RMSE", "R2"]:
             if col not in df_rw.columns:
                 df_rw[col] = np.nan
 
@@ -351,14 +351,12 @@ if rw_summary_path.exists():
             return [""] * len(row)
 
         st.dataframe(
-            df_rw_show[["Segment", "Best", "MAE", "RMSE", "R2", "MAE_ratio_vs_naive", "MAE_delta_vs_naive"]]
+            df_rw_show[["Segment", "Best", "MAE", "RMSE", "R2"]]
             .style.apply(_highlight_rw_rows, axis=1)
             .format({
                 "MAE": "{:.6f}",
                 "RMSE": "{:.6f}",
                 "R2": "{:.6f}",
-                "MAE_ratio_vs_naive": "{:.3f}",
-                "MAE_delta_vs_naive": "{:+.6f}",
             }),
             use_container_width=True,
         )

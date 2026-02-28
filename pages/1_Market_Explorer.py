@@ -1,5 +1,5 @@
 """
-📊 Market Explorer — Interactive EDA of the swaption dataset.
+Market Explorer - Interactive EDA of the swaption dataset.
 """
 
 import sys
@@ -25,7 +25,7 @@ from src.utils.surface import (
     plot_pca_components_on_surface,
 )
 
-st.set_page_config(page_title="Market Explorer", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Market Explorer", layout="wide")
 
 # ── Load data ────────────────────────────────────────────────────────────
 @st.cache_data
@@ -37,7 +37,7 @@ prices = data["train_prices"]
 dates = data["train_dates"]
 n_days = prices.shape[0]
 
-st.title("📊 Market Explorer")
+st.title("Market Explorer")
 st.markdown("Interactive exploration of the swaption volatility surface dataset.")
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -175,8 +175,8 @@ with col_pca2:
     n95 = int(np.searchsorted(cv, 0.95)) + 1
     n99 = int(np.searchsorted(cv, 0.99)) + 1
     st.divider()
-    st.markdown(f"🎯 **95% variance:** {n95} components")
-    st.markdown(f"🎯 **99% variance:** {n99} components")
+    st.markdown(f"**95% variance:** {n95} components")
+    st.markdown(f"**99% variance:** {n99} components")
 
 # PCA component visualisation
 st.subheader("PCA Components as Surface Patterns")

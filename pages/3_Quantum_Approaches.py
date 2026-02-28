@@ -19,15 +19,15 @@ from src.data.loader import load_all
 from src.data.preprocessing import normalize, denormalize
 from src.utils.surface import plot_surface_heatmap
 
-st.set_page_config(page_title="Quantum Approaches", page_icon="⚛️", layout="wide")
+st.set_page_config(page_title="Quantum Approaches", layout="wide")
 TRAINED_DIR = ROOT / "trained_models"
 
 data = load_all(ROOT / "data")
 prices = data["train_prices"]
 
-st.title("⚛️ Quantum Approaches")
+st.title("Quantum Approaches")
 st.markdown(
-    "Unified view of QRC, QKGP, QRLSTM and Quantum/Classical autoencoder results."
+    "Unified view of results from all QML approaches used in this project."
 )
 
 # -----------------------------------------------------------------------------
@@ -62,11 +62,13 @@ if (TRAINED_DIR / "quantum_extra_summary.json").exists():
                 "Val MAE": item.get("val_MAE", np.nan),
                 "Val RMSE": item.get("val_RMSE", np.nan),
                 "Val R2": item.get("val_R2", np.nan),
-                "Config": "default",
+                "Config": "6m/2p/last" if name == "QKGP" else "QRC-features + LSTM",
             })
 
 if rows:
-    st.dataframe(pd.DataFrame(rows), use_container_width=True)
+    df_rows = pd.DataFrame(rows)
+    df_rows.index = np.arange(1, len(df_rows) + 1)
+    st.dataframe(df_rows, use_container_width=True)
 else:
     st.info("No quantum forecast metrics found yet. Run `python notebooks/03_quantum_reservoir.py`.")
 

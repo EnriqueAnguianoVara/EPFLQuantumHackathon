@@ -111,12 +111,6 @@ def main() -> int:
     if not results:
         raise RuntimeError("No compatible model predictions found to compare against RW truth.")
 
-    naive_mae = results.get("Naive Persistence", {}).get("MAE", np.nan)
-    for name in list(results.keys()):
-        mae = results[name]["MAE"]
-        results[name]["MAE_ratio_vs_naive"] = float(mae / naive_mae) if np.isfinite(naive_mae) else float("nan")
-        results[name]["MAE_delta_vs_naive"] = float(mae - naive_mae) if np.isfinite(naive_mae) else float("nan")
-
     sorted_rows = sorted(results.items(), key=lambda kv: kv[1]["MAE"])
     best_model, best_metrics = sorted_rows[0]
 
@@ -141,4 +135,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

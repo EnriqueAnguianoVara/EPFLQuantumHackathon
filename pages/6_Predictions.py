@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
 from src.data.loader import load_all, TENORS, MATURITY_LABELS, N_TENORS
 from src.utils.surface import plot_surface_heatmap
 
-st.set_page_config(page_title="Final Predictions", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Final Predictions", layout="wide")
 TRAINED_DIR = ROOT / "trained_models"
 DATA_DIR = ROOT / "data"
 
@@ -26,7 +26,7 @@ prices = data["train_prices"]
 test_df = data["test_df"]
 test_info = data["test_info"]
 
-st.title("🎯 Final Predictions")
+st.title("Final Predictions")
 st.markdown("Forecast uses the best available quantum model (not the ensemble).")
 
 
@@ -83,7 +83,7 @@ future_surface = best_quantum["future_prices"]
 
 for i, dt in enumerate(future_dates):
     prices_i = future_surface[i]
-    with st.expander(f"📅 {dt}", expanded=(i == 0)):
+    with st.expander(f"{dt}", expanded=(i == 0)):
         col_a, col_b = st.columns([3, 1])
         with col_a:
             fig = plot_surface_heatmap(
@@ -114,7 +114,7 @@ else:
         mask = test_info["missing_masks"][idx]
         n_missing = int((~mask).sum())
 
-        with st.expander(f"📅 {missing_dates[i]} - {n_missing} values imputed"):
+        with st.expander(f"{missing_dates[i]} - {n_missing} values imputed"):
             fig = plot_surface_heatmap(
                 imputed_prices,
                 title=f"Imputed Surface - {missing_dates[i]}",
