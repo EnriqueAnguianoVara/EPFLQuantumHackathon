@@ -9,9 +9,11 @@ from sklearn.decomposition import PCA
 from src.data.loader import load_train
 
 
-def lag1_corr(series: np.ndarray) -> float:
-    x0 = series[:-1] - series[:-1].mean()
-    x1 = series[1:] - series[1:].mean()
+def autocorr_at_lag(series: np.ndarray, lag: int) -> float:
+    if lag <= 0 or lag >= len(series):
+        return float("nan")
+    x0 = series[:-lag] - series[:-lag].mean()
+    x1 = series[lag:] - series[lag:].mean()
     denom = float(np.sqrt((x0 @ x0) * (x1 @ x1)))
     return float((x0 @ x1) / denom) if denom > 0.0 else float("nan")
 
@@ -52,7 +54,7 @@ def ljung_box_pass_rate(diffs: np.ndarray, max_lag: int = 10) -> float:
     for col in range(n_cols):
         q_value = 0.0
         for lag in range(1, max_lag + 1):
-            ac = lag1_corr(diffs[:, col][:-lag + 1] if lag > 1 else diffs[:, col])
+            ac = autocorr_at_lag(diffs[:, col], lag)
             if np.isnan(ac):
                 continue
             q_value += (ac**2) / max(1, n_rows - lag)
