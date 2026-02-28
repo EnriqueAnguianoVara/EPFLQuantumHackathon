@@ -97,8 +97,16 @@ if not results:
     st.warning("No model results found. Run the training notebooks first.")
     st.stop()
 
-st.header("1. Validation Metrics")
-st.caption("R2 shown here is the standard coefficient of determination: R2 = 1 - SS_res/SS_tot")
+forecast_models = [
+    "Ridge",
+    "Naive Persistence",
+    "Xgboost",
+    "Lstm",
+    "QRC",
+    "QKGP",
+    "QRLSTM",
+]
+ae_models = ["QAE", "Classical AE"]
 
 df_results = pd.DataFrame(results).T
 df_results.index.name = "Model"
@@ -106,8 +114,13 @@ for col in ["MAE", "RMSE", "R2"]:
     if col not in df_results.columns:
         df_results[col] = np.nan
 
+df_forecast = df_results.loc[[m for m in forecast_models if m in df_results.index]].copy()
+df_ae = df_results.loc[[m for m in ae_models if m in df_results.index]].copy()
+
+st.header("1. Forecast Metrics")
+st.caption("Only 1-step-ahead forecasting models are compared here.")
 st.dataframe(
-    df_results[["MAE", "RMSE", "R2"]].style.format({
+    df_forecast[["MAE", "RMSE", "R2"]].style.format({
         "MAE": "{:.6f}",
         "RMSE": "{:.6f}",
         "R2": "{:.6f}",
@@ -118,9 +131,9 @@ st.dataframe(
 
 import plotly.graph_objects as go
 
-model_names = list(df_results.index)
-mae_vals = [df_results.loc[m, "MAE"] for m in model_names]
-r2_vals = [df_results.loc[m, "R2"] for m in model_names]
+model_names = list(df_forecast.index)
+mae_vals = [df_forecast.loc[m, "MAE"] for m in model_names]
+r2_vals = [df_forecast.loc[m, "R2"] for m in model_names]
 
 col1, col2 = st.columns(2)
 with col1:
@@ -139,15 +152,18 @@ with col2:
     fig_r2.update_layout(title="R2 by Model", yaxis_title="R2", height=380)
     st.plotly_chart(fig_r2, use_container_width=True)
 
-st.header("2. Autoencoder Bottleneck (Quantum vs Classical)")
-if ae_comp:
-    q_mae = ae_comp.get("quantum", {}).get("reconstruction_val_MAE", np.nan)
-    c_mae = ae_comp.get("classical", {}).get("reconstruction_val_MAE", np.nan)
-    q_r2 = ae_comp.get("quantum", {}).get("reconstruction_val_R2", np.nan)
-    c_r2 = ae_comp.get("classical", {}).get("reconstruction_val_R2", np.nan)
-    c1, c2 = st.columns(2)
-    c1.metric("Quantum AE MAE / R2", f"{q_mae:.6f} / {q_r2:.6f}")
-    c2.metric("Classical AE MAE / R2", f"{c_mae:.6f} / {c_r2:.6f}")
+st.header("2. Autoencoder Reconstruction Metrics")
+st.caption("Separate task: surface reconstruction, not temporal forecasting.")
+if not df_ae.empty:
+    st.dataframe(
+        df_ae[["MAE", "RMSE", "R2"]].style.format({
+            "MAE": "{:.6f}",
+            "RMSE": "{:.6f}",
+            "R2": "{:.6f}",
+        }).highlight_min(axis=0, subset=["MAE", "RMSE"], color="#2d5a27")
+        .highlight_max(axis=0, subset=["R2"], color="#2d5a27"),
+        use_container_width=True,
+    )
 else:
     st.info("Autoencoder comparison artifact not found.")
 
