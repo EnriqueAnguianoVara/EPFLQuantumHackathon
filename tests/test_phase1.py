@@ -12,9 +12,17 @@ and walk-forward validation WITHOUT requiring plotly or streamlit.
 import sys
 import os
 import time
+from pathlib import Path
+
+# Avoid UnicodeEncodeError on cp1252 terminals (Windows default).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(errors="replace")
 
 # Ensure we can import src
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 import numpy as np
 

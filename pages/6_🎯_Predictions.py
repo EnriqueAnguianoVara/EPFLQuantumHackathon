@@ -46,14 +46,17 @@ st.success("✅ results.xlsx loaded — all values filled!")
 # ── Section 1: Future predictions ────────────────────────────────────────
 st.header("1. Future Predictions (6 days)")
 
-future_dates = ["24/12/2051", "26/12/2051", "27/12/2051",
-                "29/12/2051", "30/12/2051", "01/01/2052"]
+future_indices = test_info["future_indices"]
+future_dates = [
+    pd.to_datetime(test_df.iloc[idx]["date"]).strftime("%d/%m/%Y")
+    for idx in future_indices
+]
 
 # Extract future rows from results
 price_cols = [c for c in results_df.columns if c not in ("Type", "Date", "type", "date")]
 
-for i in range(6):
-    row = results_df.iloc[i]
+for i, row_idx in enumerate(future_indices):
+    row = results_df.iloc[row_idx]
     future_prices = row[price_cols].values.astype(float)
 
     with st.expander(f"📅 {future_dates[i]}", expanded=(i == 0)):
@@ -80,9 +83,13 @@ for i in range(6):
 # ── Section 2: Missing data imputation ────────────────────────────────────
 st.header("2. Missing Data Imputation (2 dates)")
 
-missing_dates = ["04/08/2051", "20/09/2051"]
+missing_indices = test_info["missing_indices"]
+missing_dates = [
+    pd.to_datetime(test_df.iloc[idx]["date"]).strftime("%d/%m/%Y")
+    for idx in missing_indices
+]
 
-for i, idx in enumerate([6, 7]):
+for i, idx in enumerate(missing_indices):
     row = results_df.iloc[idx]
     imputed_prices = row[price_cols].values.astype(float)
     mask = test_info["missing_masks"][idx]
@@ -131,8 +138,8 @@ for ten_idx, mat_idx, label in representative:
     hist_dates = data["train_dates"][-hist_days:]
 
     future_vals = []
-    for i in range(6):
-        row = results_df.iloc[i]
+    for row_idx in future_indices:
+        row = results_df.iloc[row_idx]
         future_vals.append(float(row[price_cols[flat_idx]]))
 
     fig = go.Figure()

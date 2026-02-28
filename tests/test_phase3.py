@@ -12,8 +12,16 @@ Run from project root:
 import sys
 import os
 import time
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Avoid UnicodeEncodeError on cp1252 terminals (Windows default).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(errors="replace")
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 import numpy as np
 
@@ -267,7 +275,7 @@ else:
 section("4. FILE CHECKS")
 # ══════════════════════════════════════════════════════════════════════════
 
-base = os.path.dirname(os.path.abspath(__file__))
+base = str(ROOT)
 files = [
     "src/models/quantum/circuits.py",
     "src/models/quantum/reservoir.py",

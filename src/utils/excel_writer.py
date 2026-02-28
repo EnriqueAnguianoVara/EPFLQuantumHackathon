@@ -42,15 +42,26 @@ def fill_test_template(
     wb = openpyxl.load_workbook(template_path)
     ws = wb.active
 
-    # Future prediction rows: rows 2-7 in Excel (1-indexed), data rows 0-5
-    for i in range(6):
-        excel_row = i + 2  # row 2 is first data row
+    # Discover template row types dynamically from the first column ("Type").
+    future_rows = []
+    for excel_row in range(2, ws.max_row + 1):
+        row_type = str(ws.cell(row=excel_row, column=1).value or "").lower()
+        if "future" in row_type:
+            future_rows.append(excel_row)
+
+    if len(future_rows) != len(predictions_future):
+        raise ValueError(
+            f"predictions_future has {len(predictions_future)} rows, "
+            f"but template has {len(future_rows)} future rows."
+        )
+
+    for i, excel_row in enumerate(future_rows):
         surface = predictions_future[i]
         for j in range(224):
             excel_col = j + 2  # col 2 is first price col (col 1 is Type)
             ws.cell(row=excel_row, column=excel_col, value=float(surface[j]))
 
-    # Missing data rows: rows 8-9 in Excel, data rows 6-7
+    # Missing data rows are indexed in predictions_missing by template data index (0-based).
     for data_idx, predictions in predictions_missing.items():
         excel_row = data_idx + 2
         if isinstance(predictions, np.ndarray) and predictions.shape == (224,):

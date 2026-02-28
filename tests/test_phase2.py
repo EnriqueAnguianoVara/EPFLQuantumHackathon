@@ -12,8 +12,16 @@ Run from project root:
 import sys
 import os
 import time
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Avoid UnicodeEncodeError on cp1252 terminals (Windows default).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(errors="replace")
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 import numpy as np
 
@@ -212,16 +220,14 @@ except ImportError:
 section("4. TRAINING NOTEBOOK (dry run check)")
 # ══════════════════════════════════════════════════════════════════════════
 
-notebook_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                              "notebooks", "02_classical_baselines.py")
+notebook_path = str(ROOT / "notebooks" / "02_classical_baselines.py")
 check("Training notebook exists", os.path.exists(notebook_path), notebook_path)
 
 # ══════════════════════════════════════════════════════════════════════════
 section("5. STREAMLIT PAGE (import check)")
 # ══════════════════════════════════════════════════════════════════════════
 
-page_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          "pages", "2_🔧_Classical_Baselines.py")
+page_path = str(ROOT / "pages" / "2_🔧_Classical_Baselines.py")
 check("Streamlit page exists", os.path.exists(page_path), page_path)
 
 # ══════════════════════════════════════════════════════════════════════════
