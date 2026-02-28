@@ -85,6 +85,17 @@ if (TRAINED_DIR / "qae_future_prices.npy").exists():
     future_predictions["QAE"] = np.load(TRAINED_DIR / "qae_future_prices.npy")
     print(f"  QAE: {future_predictions['QAE'].shape}")
 
+# QKGP
+if (TRAINED_DIR / "qkgp_future_prices.npy").exists():
+    future_predictions["QKGP"] = np.load(TRAINED_DIR / "qkgp_future_prices.npy")
+    print(f"  QKGP: {future_predictions['QKGP'].shape}")
+
+# QRLSTM
+if (TRAINED_DIR / "qrlstm_future_prices.npy").exists():
+    future_predictions["QRLSTM"] = np.load(TRAINED_DIR / "qrlstm_future_prices.npy")
+    print(f"  QRLSTM: {future_predictions['QRLSTM'].shape}")
+
+
 if not future_predictions:
     print("  ⚠ No predictions found! Run notebooks 02-04 first.")
     sys.exit(1)
@@ -182,6 +193,18 @@ if (
             z_tensor = torch.tensor(np.array(Z_val_pred), dtype=torch.float32)
             qae_val_norm = q_ae.decode(z_tensor).numpy()
         val_predictions["QAE"] = denormalize(qae_val_norm, scaler)
+
+# QKGP validation predictions (precomputed in notebook 03)
+if (TRAINED_DIR / "qkgp_val_prices.npy").exists():
+    qkgp_val_prices = np.load(TRAINED_DIR / "qkgp_val_prices.npy")
+    if qkgp_val_prices.shape == Y_val_prices.shape:
+        val_predictions["QKGP"] = qkgp_val_prices
+
+# QRLSTM validation predictions (precomputed in notebook 03)
+if (TRAINED_DIR / "qrlstm_val_prices.npy").exists():
+    qrlstm_val_prices = np.load(TRAINED_DIR / "qrlstm_val_prices.npy")
+    if qrlstm_val_prices.shape == Y_val_prices.shape:
+        val_predictions["QRLSTM"] = qrlstm_val_prices
 
 # Keep only models available in both validation and future predictions
 usable_val_predictions = {

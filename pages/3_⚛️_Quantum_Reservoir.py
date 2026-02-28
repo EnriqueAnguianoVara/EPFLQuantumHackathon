@@ -154,3 +154,50 @@ if (TRAINED_DIR / "qrc_future_prices.npy").exists():
         fig2 = plot_surface_heatmap(future[day], title="QRC Predicted",
                                      zmin=prices.min(), zmax=prices.max())
         st.plotly_chart(fig2, use_container_width=True)
+
+
+# -- Section 5: Advanced variants (QKGP + QRLSTM) ----------------------------
+st.header("5. Advanced Quantum Variants")
+if (TRAINED_DIR / "quantum_extra_summary.json").exists():
+    with open(TRAINED_DIR / "quantum_extra_summary.json") as f:
+        extra_q = json.load(f)
+
+    rows = []
+    for name in ("QKGP", "QRLSTM"):
+        item = extra_q.get(name, {})
+        if item.get("status") == "ok":
+            rows.append({
+                "Model": name,
+                "Val MAE": item.get("val_MAE", np.nan),
+                "Val RMSE": item.get("val_RMSE", np.nan),
+                "Val R2": item.get("val_R2", np.nan),
+                "Time (s)": item.get("time_seconds", np.nan),
+            })
+        else:
+            rows.append({
+                "Model": name,
+                "Val MAE": np.nan,
+                "Val RMSE": np.nan,
+                "Val R2": np.nan,
+                "Time (s)": np.nan,
+            })
+
+    st.dataframe(pd.DataFrame(rows), use_container_width=True)
+
+    future_map = {
+        "QKGP": TRAINED_DIR / "qkgp_future_prices.npy",
+        "QRLSTM": TRAINED_DIR / "qrlstm_future_prices.npy",
+    }
+    available = {k: np.load(v) for k, v in future_map.items() if v.exists()}
+    if available:
+        day = st.selectbox("Advanced model day", range(6), format_func=lambda i: ["24/12/2051", "26/12/2051", "27/12/2051", "29/12/2051", "30/12/2051", "01/01/2052"][i])
+        model_name = st.selectbox("Advanced model", list(available.keys()))
+        c1, c2 = st.columns(2)
+        with c1:
+            fig1 = plot_surface_heatmap(prices[-1], title="Last Known", zmin=prices.min(), zmax=prices.max())
+            st.plotly_chart(fig1, use_container_width=True)
+        with c2:
+            fig2 = plot_surface_heatmap(available[model_name][day], title=f"{model_name} Predicted", zmin=prices.min(), zmax=prices.max())
+            st.plotly_chart(fig2, use_container_width=True)
+else:
+    st.info("Run notebook 03 to generate QKGP/QRLSTM artifacts.")

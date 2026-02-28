@@ -139,10 +139,13 @@ class QuantumReservoirLSTMForecaster:
         self.train_lookup_: pd.DataFrame | None = None
         self.validation_result_: BenchmarkResult | None = None
         self.training_history_: list[tuple[int, float, float]] = []
+        self.validation_pred_surface_: np.ndarray | None = None
+        self.validation_true_surface_: np.ndarray | None = None
 
     @staticmethod
     def _surface_columns(df: pd.DataFrame) -> list[str]:
-        return [c for c in df.columns if c not in SURFACE_META_COLUMNS]
+        excluded = {"type", "date"}
+        return [c for c in df.columns if str(c).strip().lower() not in excluded]
 
     def _to_surface(self, factors: np.ndarray) -> np.ndarray:
         if self.scaler_ is None or self.pca_ is None:
@@ -260,6 +263,8 @@ class QuantumReservoirLSTMForecaster:
                 best_metric = surface_mse
                 best_factor = factor_mse
                 best_state = copy.deepcopy(self.model_.state_dict())
+                self.validation_pred_surface_ = pred_surface.copy()
+                self.validation_true_surface_ = true_surface.copy()
                 wait = 0
             else:
                 wait += 1
@@ -283,6 +288,8 @@ class QuantumReservoirLSTMForecaster:
 
     def fit(self, train_df: pd.DataFrame) -> "QuantumReservoirLSTMForecaster":
         train_df = train_df.copy()
+        if "Date" not in train_df.columns and "date" in train_df.columns:
+            train_df = train_df.rename(columns={"date": "Date"})
         train_df["Date"] = pd.to_datetime(train_df["Date"], dayfirst=True)
         train_df = train_df.sort_values("Date").reset_index(drop=True)
 
@@ -386,6 +393,13 @@ class QuantumReservoirLSTMForecaster:
 
         return submission
 
+    def get_validation_surfaces(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return validation (predicted, true) surfaces from best checkpoint."""
+        self._require_fitted()
+        if self.validation_pred_surface_ is None or self.validation_true_surface_ is None:
+            raise RuntimeError("Validation surfaces are not available.")
+        return self.validation_pred_surface_.copy(), self.validation_true_surface_.copy()
+
 
 def evaluate_quantum_reservoir_lstm(train_df: pd.DataFrame) -> tuple[BenchmarkResult, QuantumReservoirLSTMForecaster]:
     model = QuantumReservoirLSTMForecaster().fit(train_df)
@@ -453,3 +467,4 @@ def evaluate_notebook_baseline(train_df: pd.DataFrame) -> BenchmarkResult:
         surface_mse=float(best_surface),
         details=f"k={k}, window={window}, alpha={best_alpha}",
     )
+

@@ -48,6 +48,18 @@ if (TRAINED_DIR / "qrc_ablation.json").exists():
         "R²": best_qrc["orig_R2"],
     }
 
+if (TRAINED_DIR / "quantum_extra_summary.json").exists():
+    with open(TRAINED_DIR / "quantum_extra_summary.json") as f:
+        extra_q = json.load(f)
+    for name in ("QKGP", "QRLSTM"):
+        item = extra_q.get(name, {})
+        if item.get("status") == "ok":
+            results[name] = {
+                "MAE": item.get("val_MAE", np.nan),
+                "RMSE": item.get("val_RMSE", np.nan),
+                "R2": item.get("val_R2", np.nan),
+            }
+
 if (TRAINED_DIR / "autoencoder_comparison.json").exists():
     with open(TRAINED_DIR / "autoencoder_comparison.json") as f:
         ae_comp = json.load(f)
@@ -64,6 +76,13 @@ if (TRAINED_DIR / "autoencoder_comparison.json").exists():
             "R²": ae_comp["classical"]["reconstruction_val_R2"],
         }
 
+for _m in results.values():
+    if "R2" not in _m:
+        for _k, _v in _m.items():
+            if str(_k).startswith("R"):
+                _m["R2"] = _v
+                break
+
 if not results:
     st.warning("No model results found. Run the training notebooks first.")
     st.stop()
@@ -75,17 +94,17 @@ df_results = pd.DataFrame(results).T
 df_results.index.name = "Model"
 
 # Ensure consistent columns
-for col in ["MAE", "RMSE", "R²"]:
+for col in ["MAE", "RMSE", "R2"]:
     if col not in df_results.columns:
         df_results[col] = np.nan
 
 st.dataframe(
-    df_results[["MAE", "RMSE", "R²"]].style.format({
+    df_results[["MAE", "RMSE", "R2"]].style.format({
         "MAE": "{:.6f}",
         "RMSE": "{:.6f}",
-        "R²": "{:.6f}",
+        "R2": "{:.6f}",
     }).highlight_min(axis=0, subset=["MAE", "RMSE"], color="#2d5a27")
-    .highlight_max(axis=0, subset=["R²"], color="#2d5a27"),
+    .highlight_max(axis=0, subset=["R2"], color="#2d5a27"),
     use_container_width=True,
 )
 
@@ -94,7 +113,7 @@ import plotly.graph_objects as go
 
 model_names = list(results.keys())
 mae_vals = [results[m].get("MAE", 0) for m in model_names]
-r2_vals = [results[m].get("R²", 0) for m in model_names]
+r2_vals = [results[m].get("R2", 0) for m in model_names]
 
 col1, col2 = st.columns(2)
 
@@ -113,7 +132,7 @@ with col2:
         marker_color=["#FF6B35" if "Q" not in m and "quantum" not in m.lower()
                        else "#7030A0" for m in model_names],
     ))
-    fig_r2.update_layout(title="R² by Model", yaxis_title="R²", height=400)
+    fig_r2.update_layout(title="R2 by Model", yaxis_title="R2", height=400)
     st.plotly_chart(fig_r2, use_container_width=True)
 
 st.markdown(
@@ -151,6 +170,8 @@ future_files = {
     "Ridge": "ridge_future_prices.npy",
     "QRC": "qrc_future_prices.npy",
     "QAE": "qae_future_prices.npy",
+    "QKGP": "qkgp_future_prices.npy",
+    "QRLSTM": "qrlstm_future_prices.npy",
 }
 
 future_preds = {}
@@ -223,3 +244,4 @@ if (TRAINED_DIR / "final_summary.json").exists():
     st.json(summary)
 else:
     st.info("Run `python notebooks/05_final_predictions.py` to generate ensemble results.")
+

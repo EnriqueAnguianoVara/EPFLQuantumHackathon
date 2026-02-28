@@ -25,6 +25,8 @@ from src.data.loader import load_all
 from src.data.preprocessing import normalize, pca_reduce, denormalize, full_pipeline
 from src.evaluation.metrics import all_metrics
 from src.models.quantum.reservoir import QuantumReservoir
+from src.models.quantum.quantum_kernel_gp import QuantumKernelGP
+from src.models.quantum.quantum_reservoir_lstm import QuantumReservoirLSTMForecaster
 
 TRAINED_DIR = ROOT / "trained_models"
 TRAINED_DIR.mkdir(exist_ok=True)
@@ -228,4 +230,87 @@ with open(TRAINED_DIR / "qrc_ablation.json", "w") as f:
     json.dump(ablation_results, f, indent=2)
 print("  Saved qrc_ablation.json ✓")
 
-print("\n  ✅ Phase 3a (Quantum Reservoir) complete!")
+# ============================================================================
+# Extra quantum models: QKGP + QRLSTM
+# ============================================================================
+print("\n" + "=" * 60)
+print("  EXTRA QUANTUM MODELS (QKGP + QRLSTM)")
+print("=" * 60)
+
+extra_summary = {}
+val_targets_pca = val_pca[WINDOW:]
+val_targets_norm = pca_reducer.inverse_transform(val_targets_pca)
+val_targets_prices = denormalize(val_targets_norm, scaler)
+
+try:
+    t0 = time.time()
+    qkgp = QuantumKernelGP(
+        n_modes=6,
+        n_photons=2,
+        n_pca=N_PCA,
+        window_size=WINDOW,
+        encoding="last",
+        kernel_type="fidelity",
+        alpha=1e-3,
+        seed=42,
+        circuit_type="reservoir",
+        circuit_depth=2,
+    )
+    qkgp.fit_from_pca(train_pca, max_samples=220, verbose=True)
+    X_val_qkgp, _ = qkgp._build_windowed_dataset(val_pca)
+    qkgp_val_pca, _ = qkgp.predict(X_val_qkgp, return_std=False)
+    qkgp_val_norm = pca_reducer.inverse_transform(qkgp_val_pca)
+    qkgp_val_prices = denormalize(qkgp_val_norm, scaler)
+    qkgp_m = all_metrics(val_targets_prices, qkgp_val_prices)
+    qkgp_r2 = qkgp_m.get("R2")
+    if qkgp_r2 is None:
+        qkgp_r2 = next((v for k, v in qkgp_m.items() if str(k).startswith("R")), float("nan"))
+    qkgp_future_pca, qkgp_future_std = qkgp.predict_rolling(all_pca, n_steps=6, return_std=True)
+    qkgp_future_norm = pca_reducer.inverse_transform(qkgp_future_pca)
+    qkgp_future_prices = denormalize(qkgp_future_norm, scaler)
+    np.save(TRAINED_DIR / "qkgp_future_pca.npy", qkgp_future_pca)
+    np.save(TRAINED_DIR / "qkgp_future_prices.npy", qkgp_future_prices)
+    np.save(TRAINED_DIR / "qkgp_val_prices.npy", qkgp_val_prices)
+    if qkgp_future_std is not None:
+        np.save(TRAINED_DIR / "qkgp_future_std.npy", qkgp_future_std)
+    extra_summary["QKGP"] = {
+        "status": "ok",
+        "val_MAE": qkgp_m["MAE"],
+        "val_RMSE": qkgp_m["RMSE"],
+        "val_R2": qkgp_r2,
+        "time_seconds": time.time() - t0,
+    }
+    print(f"  QKGP   -> MAE={qkgp_m['MAE']:.6f}, R2={qkgp_r2:.4f}")
+except Exception as e:
+    extra_summary["QKGP"] = {"status": "error", "error": str(e)}
+    print(f"  WARNING QKGP failed: {e}")
+
+try:
+    t0 = time.time()
+    train_df_qrlstm = data["train_df"].copy().rename(columns={"date": "Date"})
+    qrlstm = QuantumReservoirLSTMForecaster().fit(train_df_qrlstm)
+    qrlstm_future_prices = qrlstm.forecast_future_surfaces(6)
+    qrlstm_val_pred_prices, qrlstm_val_true_prices = qrlstm.get_validation_surfaces()
+    qrlstm_m = all_metrics(qrlstm_val_true_prices, qrlstm_val_pred_prices)
+    qrlstm_r2 = qrlstm_m.get("R2")
+    if qrlstm_r2 is None:
+        qrlstm_r2 = next((v for k, v in qrlstm_m.items() if str(k).startswith("R")), float("nan"))
+    np.save(TRAINED_DIR / "qrlstm_future_prices.npy", qrlstm_future_prices)
+    np.save(TRAINED_DIR / "qrlstm_val_prices.npy", qrlstm_val_pred_prices)
+    extra_summary["QRLSTM"] = {
+        "status": "ok",
+        "val_MAE": qrlstm_m["MAE"],
+        "val_RMSE": qrlstm_m["RMSE"],
+        "val_R2": qrlstm_r2,
+        "time_seconds": time.time() - t0,
+    }
+    print(f"  QRLSTM -> MAE={qrlstm_m['MAE']:.6f}, R2={qrlstm_r2:.4f}")
+except Exception as e:
+    extra_summary["QRLSTM"] = {"status": "error", "error": str(e)}
+    print(f"  WARNING QRLSTM failed: {e}")
+
+with open(TRAINED_DIR / "quantum_extra_summary.json", "w") as f:
+    json.dump(extra_summary, f, indent=2)
+print("  Saved quantum_extra_summary.json")
+
+print("\n  ✅ Phase 3a (Quantum Reservoir + extras) complete!")
