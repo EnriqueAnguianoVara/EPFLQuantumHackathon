@@ -1,21 +1,21 @@
 {
   "quantum": {
-    "reconstruction_val_MAE": 0.003918950835063005,
-    "reconstruction_val_RMSE": 0.005344587274803441,
-    "reconstruction_val_R2": 0.9969323832416485,
+    "reconstruction_val_MAE": 0.003961924393542389,
+    "reconstruction_val_RMSE": 0.005434201460362932,
+    "reconstruction_val_R2": 0.9968286496352086,
     "n_params": 31370,
-    "epochs_trained": 64,
-    "best_val_loss": 0.1109052374958992
+    "epochs_trained": 77,
+    "best_val_loss": 0.09368103742599487
   },
   "classical": {
-    "reconstruction_val_MAE": 0.0013408260913581784,
-    "reconstruction_val_RMSE": 0.002056375634957856,
-    "reconstruction_val_R2": 0.999545872654461,
+    "reconstruction_val_MAE": 0.0014598482161336304,
+    "reconstruction_val_RMSE": 0.0022804037210660075,
+    "reconstruction_val_R2": 0.999441534644141,
     "n_params": 31390,
-    "epochs_trained": 97,
-    "best_val_loss": 0.012513147667050362
+    "epochs_trained": 103,
+    "best_val_loss": 0.012100834399461746
   },
-  "temporal_latent_MAE": 0.012414854019880295,
-  "temporal_latent_R2": 0.9785216450691223,
+  "temporal_latent_MAE": 0.018392710015177727,
+  "temporal_latent_R2": 0.9596264362335205,
   "latent_dim": 8
 }
