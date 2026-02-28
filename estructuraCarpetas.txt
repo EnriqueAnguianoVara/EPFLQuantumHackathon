@@ -1,0 +1,66 @@
+quantum-swaptions/
+│
+├── app.py                          # ← Punto de entrada Streamlit (streamlit run app.py)
+│
+├── pages/                          # ← Streamlit multi-page app
+│   ├── 1_📊_Market_Explorer.py     # Tab 1: Exploración visual de los datos
+│   ├── 2_🔧_Classical_Baselines.py # Tab 2: Benchmarks clásicos
+│   ├── 3_⚛️_Quantum_Reservoir.py   # Tab 3: Opción 1 - QRC
+│   ├── 4_🧬_Quantum_Autoencoder.py # Tab 4: Opción 4 - QAutoencoder
+│   ├── 5_📈_Comparison.py          # Tab 5: Quantum vs Classical head-to-head
+│   └── 6_🎯_Predictions.py         # Tab 6: Resultados finales + descargar Excel
+│
+├── src/                            # ← Toda la lógica de negocio y modelos
+│   ├── _init_.py
+│   ├── data/
+│   │   ├── _init_.py
+│   │   ├── loader.py              # Cargar train.xlsx, test_template.xlsx, parsear headers
+│   │   └── preprocessing.py       # Normalización, windowing, PCA, train/val split
+│   │
+│   ├── models/
+│   │   ├── _init_.py
+│   │   ├── classical/
+│   │   │   ├── _init_.py
+│   │   │   ├── ridge.py           # Ridge Regression baseline
+│   │   │   ├── xgboost_model.py   # XGBoost/LightGBM baseline
+│   │   │   └── lstm.py            # LSTM pequeño baseline
+│   │   │
+│   │   ├── quantum/
+│   │   │   ├── _init_.py
+│   │   │   ├── reservoir.py       # Quantum Reservoir Computing (Opción 1)
+│   │   │   ├── autoencoder.py     # Quantum Autoencoder completo (Opción 4)
+│   │   │   └── circuits.py        # Builders de circuitos MerLin reutilizables
+│   │   │
+│   │   └── ensemble.py            # Combinar predicciones de múltiples modelos
+│   │
+│   ├── evaluation/
+│   │   ├── _init_.py
+│   │   ├── metrics.py             # MAE, RMSE, R², MAPE, por superficie y por factor
+│   │   └── walk_forward.py        # Walk-forward validation temporal
+│   │
+│   └── utils/
+│       ├── _init_.py
+│       ├── surface.py             # Parsear headers → grilla (tenor, maturity), reshape 224↔14×16
+│       └── excel_writer.py        # Rellenar test_template.xlsx con predicciones
+│
+├── notebooks/                      # ← Exploración y desarrollo (no se presenta, pero se entrega)
+│   ├── 01_eda.ipynb               # Análisis exploratorio de datos
+│   ├── 02_classical_baselines.ipynb
+│   ├── 03_quantum_reservoir.ipynb
+│   ├── 04_quantum_autoencoder.ipynb
+│   └── 05_final_predictions.ipynb
+│
+├── trained_models/                 # ← Pesos guardados (para que Streamlit no re-entrene)
+│   ├── autoencoder_weights.pt
+│   ├── reservoir_ridge.pkl
+│   ├── temporal_model.pkl
+│   └── scalers.pkl
+│
+├── data/
+│   ├── train.xlsx                 # Dataset de training (proporcionado)
+│   ├── test_template.xlsx         # Template a rellenar (proporcionado)
+│   ├── sample_Simulated_Swaption_Price.xlsx  # Sample (proporcionado)
+│   └── results.xlsx               # ← OUTPUT: template rellenado con predicciones
+│
+├── requirements.txt
+└── README.md

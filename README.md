@@ -1,4 +1,4 @@
-# QPFL : EPFL Quantum Hackathon - ____ Challenge 
+# QPFL : EPFL Quantum Hackathon - Quandela Challenge 
 ## Team : INVIQTVS
 #### Authors
 - Manuel Esparcia Cantos
