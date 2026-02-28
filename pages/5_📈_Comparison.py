@@ -300,25 +300,53 @@ if rw_summary_path.exists():
             if col not in df_rw.columns:
                 df_rw[col] = np.nan
 
+        rw_classical = [m for m in ["Ridge", "Naive Persistence", "XGBoost", "LSTM", "Xgboost", "Lstm"] if m in df_rw.index]
+        rw_quantum = [m for m in ["QRC", "QKGP", "QRLSTM", "QAE"] if m in df_rw.index]
+        rw_best_classical = min(rw_classical, key=lambda m: df_rw.loc[m, "MAE"]) if rw_classical else None
+        rw_best_quantum = min(rw_quantum, key=lambda m: df_rw.loc[m, "MAE"]) if rw_quantum else None
+
+        df_rw_show = df_rw.copy()
+        df_rw_show.insert(
+            0,
+            "Segment",
+            ["Classical" if m in rw_classical else ("Quantum" if m in rw_quantum else "Other") for m in df_rw_show.index],
+        )
+        df_rw_show.insert(
+            1,
+            "Best",
+            [
+                "Best Classical" if m == rw_best_classical
+                else ("Best Quantum" if m == rw_best_quantum else "")
+                for m in df_rw_show.index
+            ],
+        )
+
+        def _highlight_rw_rows(row):
+            if row.name == rw_best_classical:
+                return ["background-color: #2d5a27"] * len(row)
+            if row.name == rw_best_quantum:
+                return ["background-color: #2b4c7e"] * len(row)
+            return [""] * len(row)
+
         st.dataframe(
-            df_rw[["MAE", "RMSE", "R2", "MAE_ratio_vs_naive", "MAE_delta_vs_naive"]].style.format({
+            df_rw_show[["Segment", "Best", "MAE", "RMSE", "R2", "MAE_ratio_vs_naive", "MAE_delta_vs_naive"]]
+            .style.apply(_highlight_rw_rows, axis=1)
+            .format({
                 "MAE": "{:.6f}",
                 "RMSE": "{:.6f}",
                 "R2": "{:.6f}",
                 "MAE_ratio_vs_naive": "{:.3f}",
                 "MAE_delta_vs_naive": "{:+.6f}",
-            }).highlight_min(axis=0, subset=["MAE", "RMSE"], color="#2d5a27")
-            .highlight_max(axis=0, subset=["R2"], color="#2d5a27"),
+            }),
             use_container_width=True,
         )
 
-        c1, c2 = st.columns(2)
-        c1.metric(
-            "Best vs RW (MAE)",
-            rw_summary.get("best_model_by_mae", "n/a"),
-            f"MAE={rw_summary.get('best_model_metrics', {}).get('MAE', np.nan):.6f}",
-        )
-        c2.metric("RW Days x Points", f"{rw_summary.get('n_days', '?')} x {rw_summary.get('n_points', '?')}")
+        c1, c2, c3 = st.columns(3)
+        if rw_best_classical is not None:
+            c1.metric("Best Classical vs RW", rw_best_classical, f"MAE={df_rw.loc[rw_best_classical, 'MAE']:.6f}")
+        if rw_best_quantum is not None:
+            c2.metric("Best Quantum vs RW", rw_best_quantum, f"MAE={df_rw.loc[rw_best_quantum, 'MAE']:.6f}")
+        c3.metric("RW Days x Points", f"{rw_summary.get('n_days', '?')} x {rw_summary.get('n_points', '?')}")
 else:
     st.info(
         "No RW auxiliary summary found. Run:\n"
