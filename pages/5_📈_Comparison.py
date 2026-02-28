@@ -119,15 +119,59 @@ df_ae = df_results.loc[[m for m in ae_models if m in df_results.index]].copy()
 
 st.header("1. Forecast Metrics")
 st.caption("Only 1-step-ahead forecasting models are compared here.")
+classical_forecast = [m for m in ["Ridge", "Naive Persistence", "Xgboost", "Lstm"] if m in df_forecast.index]
+quantum_forecast = [m for m in ["QRC", "QKGP", "QRLSTM"] if m in df_forecast.index]
+
+best_classical = min(classical_forecast, key=lambda m: df_forecast.loc[m, "MAE"]) if classical_forecast else None
+best_quantum = min(quantum_forecast, key=lambda m: df_forecast.loc[m, "MAE"]) if quantum_forecast else None
+
+df_forecast_show = df_forecast[["MAE", "RMSE", "R2"]].copy()
+df_forecast_show.insert(
+    0,
+    "Segment",
+    ["Classical" if m in classical_forecast else "Quantum" for m in df_forecast_show.index],
+)
+df_forecast_show.insert(
+    1,
+    "Best",
+    [
+        "Best Classical" if m == best_classical
+        else ("Best Quantum" if m == best_quantum else "")
+        for m in df_forecast_show.index
+    ],
+)
+
+
+def _highlight_best_rows(row):
+    if row.name == best_classical:
+        return ["background-color: #2d5a27"] * len(row)
+    if row.name == best_quantum:
+        return ["background-color: #2b4c7e"] * len(row)
+    return [""] * len(row)
+
+
 st.dataframe(
-    df_forecast[["MAE", "RMSE", "R2"]].style.format({
+    df_forecast_show.style.apply(_highlight_best_rows, axis=1).format({
         "MAE": "{:.6f}",
         "RMSE": "{:.6f}",
         "R2": "{:.6f}",
-    }).highlight_min(axis=0, subset=["MAE", "RMSE"], color="#2d5a27")
-    .highlight_max(axis=0, subset=["R2"], color="#2d5a27"),
+    }),
     use_container_width=True,
 )
+
+c1, c2 = st.columns(2)
+if best_classical is not None:
+    c1.metric(
+        "Best Classical (MAE)",
+        best_classical,
+        f"MAE={df_forecast.loc[best_classical, 'MAE']:.6f}",
+    )
+if best_quantum is not None:
+    c2.metric(
+        "Best Quantum (MAE)",
+        best_quantum,
+        f"MAE={df_forecast.loc[best_quantum, 'MAE']:.6f}",
+    )
 
 import plotly.graph_objects as go
 
@@ -237,3 +281,46 @@ if future_preds:
         st.plotly_chart(fig_std, use_container_width=True)
 else:
     st.info("No future prediction artifacts found.")
+
+st.header("4. Auxiliary RW Validation (non-official)")
+st.caption(
+    "This section compares forecasts against synthetic RW future surfaces. "
+    "It is an additional sanity check and not part of the official benchmark."
+)
+
+rw_summary_path = TRAINED_DIR / "rw_validation_summary.json"
+if rw_summary_path.exists():
+    with open(rw_summary_path, encoding="utf-8") as f:
+        rw_summary = json.load(f)
+
+    rw_results = rw_summary.get("results", {})
+    if rw_results:
+        df_rw = pd.DataFrame(rw_results).T
+        for col in ["MAE", "RMSE", "R2", "MAE_ratio_vs_naive", "MAE_delta_vs_naive"]:
+            if col not in df_rw.columns:
+                df_rw[col] = np.nan
+
+        st.dataframe(
+            df_rw[["MAE", "RMSE", "R2", "MAE_ratio_vs_naive", "MAE_delta_vs_naive"]].style.format({
+                "MAE": "{:.6f}",
+                "RMSE": "{:.6f}",
+                "R2": "{:.6f}",
+                "MAE_ratio_vs_naive": "{:.3f}",
+                "MAE_delta_vs_naive": "{:+.6f}",
+            }).highlight_min(axis=0, subset=["MAE", "RMSE"], color="#2d5a27")
+            .highlight_max(axis=0, subset=["R2"], color="#2d5a27"),
+            use_container_width=True,
+        )
+
+        c1, c2 = st.columns(2)
+        c1.metric(
+            "Best vs RW (MAE)",
+            rw_summary.get("best_model_by_mae", "n/a"),
+            f"MAE={rw_summary.get('best_model_metrics', {}).get('MAE', np.nan):.6f}",
+        )
+        c2.metric("RW Days x Points", f"{rw_summary.get('n_days', '?')} x {rw_summary.get('n_points', '?')}")
+else:
+    st.info(
+        "No RW auxiliary summary found. Run:\n"
+        "`python scripts/evaluate_vs_rw.py --rw-file \"C:\\Users\\jorge\\Downloads\\rw_6days.xlsx\"`"
+    )

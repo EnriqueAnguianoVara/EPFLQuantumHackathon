@@ -1,0 +1,58 @@
+{
+  "note": "Auxiliary RW validation only; not part of official challenge benchmark.",
+  "rw_file": "C:\\Users\\jorge\\Downloads\\rw_6days.xlsx",
+  "n_days": 6,
+  "n_points": 224,
+  "best_model_by_mae": "Naive Persistence",
+  "best_model_metrics": {
+    "MAE": 0.00026536845720848953,
+    "RMSE": 0.00032499205349443,
+    "R2": 0.9999883310388281,
+    "MAE_ratio_vs_naive": 1.0,
+    "MAE_delta_vs_naive": 0.0
+  },
+  "results": {
+    "Naive Persistence": {
+      "MAE": 0.00026536845720848953,
+      "RMSE": 0.00032499205349443,
+      "R2": 0.9999883310388281,
+      "MAE_ratio_vs_naive": 1.0,
+      "MAE_delta_vs_naive": 0.0
+    },
+    "Ridge": {
+      "MAE": 0.0008767854668994083,
+      "RMSE": 0.0011936430166893735,
+      "R2": 0.999842588798484,
+      "MAE_ratio_vs_naive": 3.30403046436884,
+      "MAE_delta_vs_naive": 0.0006114170096909188
+    },
+    "QRLSTM": {
+      "MAE": 0.002264011639567838,
+      "RMSE": 0.0033284143255797203,
+      "R2": 0.9987760562024407,
+      "MAE_ratio_vs_naive": 8.531577804626167,
+      "MAE_delta_vs_naive": 0.0019986431823593486
+    },
+    "QAE": {
+      "MAE": 0.0032527366483388726,
+      "RMSE": 0.004101165333333129,
+      "R2": 0.998141762303129,
+      "MAE_ratio_vs_naive": 12.257435124564656,
+      "MAE_delta_vs_naive": 0.002987368191130383
+    },
+    "QRC": {
+      "MAE": 0.02734213569837422,
+      "RMSE": 0.0298246037767413,
+      "R2": 0.9017265786316802,
+      "MAE_ratio_vs_naive": 103.03461076721933,
+      "MAE_delta_vs_naive": 0.02707676724116573
+    },
+    "QKGP": {
+      "MAE": 0.03427637547979883,
+      "RMSE": 0.04047154732018978,
+      "R2": 0.8190384413280254,
+      "MAE_ratio_vs_naive": 129.16522121869681,
+      "MAE_delta_vs_naive": 0.03401100702259034
+    }
+  }
+}
