@@ -1,0 +1,19 @@
+Hacer la presentacion submission ready
+Documentar el codigo y revisarlo a conciencia dejandolo submission ready (nada de spanglish, 
+pycaches guarras, revisar el requirements y eliminar todo lo que sobre (chequeando que no tarda
+la vida en crearse un entorno valido para la ejecucion del repo), que sea compatible con windows y linux)
+Hacer el readme
+Hacer un informe detallado de nuestra solución (max 10 pags!!)
+Dejar el streamlit que hay ahora como judge presentation para que los jueces vean los resultados
+del codigo cuando lo corran
+
+Practicar presentación
+
+Mimir
+
+Ganar mañana 
+
+
+LETS FUCKING GOOOOOOOOOOOOOOOOOOOOOO
+
+y kebab
