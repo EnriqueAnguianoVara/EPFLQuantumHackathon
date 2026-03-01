@@ -46,6 +46,16 @@ st.markdown(
 """
 )
 
+st.markdown("### Team INVIQTVS")
+st.markdown(
+    """
+- **Enrique Anguiano Vara** - [enriqueangianov@gmail.com](mailto:enriqueangianov@gmail.com) (BSc student, UAM)
+- **Jorge Benito Diaz** - [jorgebenito.diaz22@gmail.com](mailto:jorgebenito.diaz22@gmail.com) (MSc student, UAM; First Stage Researcher, UPM)
+- **Manuel Esparcia Cantos** - [manuelesparciacantos@gmail.com](mailto:manuelesparciacantos@gmail.com) (MSc student, UAM)
+- **Ignacio Lopez Leis** - [nacholopezleis@gmail.com](mailto:nacholopezleis@gmail.com) (MSc student, UAM)
+"""
+)
+
 st.markdown(
     """
 ---
