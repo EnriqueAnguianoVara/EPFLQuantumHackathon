@@ -1,0 +1,344 @@
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{setspace}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{siunitx}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{cite}
+\usepackage{enumitem}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black
+}
+
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+\onehalfspacing
+
+\title{INVIQTVS Submission Report\\
+\large EPFL x Quandela Quantum Challenge 2026}
+\author{
+Enrique Anguiano Vara \and
+Jorge Benito Diaz \and
+Manuel Esparcia Cantos \and
+Ignacio Lopez Leis
+}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report documents the final submission pipeline developed by Team INVIQTVS for the EPFL x Quandela quantum challenge on swaption surface modeling. The implemented system addresses two operational tasks defined by the challenge workflow: (i) six-step forward forecasting of volatility surfaces and (ii) imputation of two rows with partially missing entries in the test template. The codebase is organized as a reproducible pipeline with four executable stages, a judge-facing Streamlit application, and versioned artifacts for traceability.
+
+Methodologically, we benchmark classical forecasters (Ridge, XGBoost, LSTM, and Naive Persistence), quantum-inspired and photonic-hybrid approaches (QRC, QKGP, QRLSTM), and a reconstruction branch based on quantum and classical autoencoders. The official benchmark relies on challenge data only and uses time-ordered validation; an additional random-walk (RW) experiment is included only as an auxiliary sanity check and is not used for leaderboard claims.
+
+Empirically, the strongest official one-step baseline in our current artifacts is Naive Persistence (MAE 0.002556), while the most competitive quantum forecaster is QRLSTM (MAE 0.002721). In reconstruction, the quantum autoencoder outperforms the matched classical bottleneck. The report concludes with a technical discussion of why this ranking is coherent with literature on short-horizon persistence, kernel methods, reservoir computing, and variational photonic models, and provides concrete next steps for production-grade extensions.
+\end{abstract}
+
+\section{Introduction}
+Forecasting and reconstructing swaption volatility surfaces is a high-dimensional time-series problem with direct relevance for derivatives pricing and risk management. In market practice, robust baselines are typically hard to beat for very short horizons, yet non-linear and quantum-inspired methods may provide gains in representation quality, uncertainty handling, and robustness under distribution shifts.
+
+Our submission was designed under three constraints:
+\begin{enumerate}[leftmargin=1.4em]
+  \item \textbf{Faithfulness to the official workflow}: benchmark conclusions are drawn only from the challenge dataset.
+  \item \textbf{Reproducibility}: a one-command pipeline (\texttt{python run\_pipeline.py}) regenerates all training artifacts and the final \texttt{results.xlsx}.
+  \item \textbf{Comparability}: classical and quantum families are evaluated with consistent preprocessing and metrics.
+\end{enumerate}
+
+From a modeling perspective, the project combines ideas from term-structure modeling and modern machine learning. We reduce surface dimensionality through PCA \cite{jolliffe2002pca}, use regularized linear and sequence baselines \cite{hoerl1970ridge,hochreiter1997lstm,chen2016xgboost}, and benchmark photonic quantum layers and kernels motivated by current QML literature \cite{havlicek2019supervised,schuld2019feature,schuld2021kernel,cerezo2021vqa}. For financial context, we treat persistence and random-walk behavior as strong null models \cite{fama1970efficient,diebold2006yield,brace1997market}.
+
+\section{Problem Definition and Data}
+\subsection{Challenge Tasks}
+The submission must fill a provided test template with:
+\begin{itemize}[leftmargin=1.4em]
+  \item six future volatility surfaces (forecast horizon),
+  \item two dates with partially missing entries (imputation).
+\end{itemize}
+
+\subsection{Dataset Structure}
+The training matrix has shape \(\mathbf{494 \times 224}\): 494 dates and 224 grid points per surface. Each surface point corresponds to a \((\text{tenor}, \text{maturity})\) pair in a fixed \(14 \times 16\) grid. The loader normalizes schema and parses metadata from canonical challenge headers.
+
+\subsection{Official vs Auxiliary Validation}
+Two evaluation regimes are maintained by design:
+\begin{enumerate}[leftmargin=1.4em]
+  \item \textbf{Official workflow}: all model selection and ranking for submission rely only on challenge data.
+  \item \textbf{Auxiliary RW check}: a separate script compares model forecasts to synthetic random-walk future surfaces; this is explicitly labeled as non-official.
+\end{enumerate}
+
+\section{Pipeline and Experimental Protocol}
+\subsection{End-to-End Pipeline}
+The repository executes four deterministic stages:
+\begin{enumerate}[leftmargin=1.4em]
+  \item \texttt{02\_classical\_baselines.py}
+  \item \texttt{03\_quantum\_reservoir.py}
+  \item \texttt{04\_quantum\_autoencoder.py}
+  \item \texttt{05\_final\_predictions.py}
+\end{enumerate}
+Artifacts are stored in \texttt{trained\_models/}, and the final workbook is written to \texttt{data/results.xlsx}.
+
+\subsection{Preprocessing}
+Given raw prices \(x_{t,j}\), we apply z-score normalization per grid point:
+\begin{equation}
+z_{t,j}=\frac{x_{t,j}-\mu_j}{\sigma_j}.
+\end{equation}
+Then PCA is fitted on training-only normalized surfaces:
+\begin{equation}
+\mathbf{z}_t \approx \mathbf{W}_k \mathbf{p}_t,\quad k=6
+\end{equation}
+for forecasting branches. Windowed samples use lookback \(W=20\), horizon \(H=1\), and temporal split ratio \(85\%/15\%.\)
+
+\subsection{Metrics}
+We track MAE, RMSE, MAPE, \(R^2\), and maximum absolute error:
+\begin{equation}
+R^2 = 1-\frac{\sum_i (y_i-\hat{y}_i)^2}{\sum_i (y_i-\bar{y})^2}.
+\end{equation}
+Forecast and reconstruction are reported separately to avoid conflating tasks.
+
+\section{Classical Forecasting Baselines}
+\subsection{Ridge Regression}
+Ridge is trained on flattened PCA windows. For target vector \(\mathbf{y}\) and design matrix \(X\), parameters solve:
+\begin{equation}
+\hat{\beta}=\arg\min_{\beta}\lVert \mathbf{y}-X\beta\rVert_2^2+\lambda\lVert\beta\rVert_2^2.
+\end{equation}
+This baseline is strong for low-noise short-horizon settings \cite{hoerl1970ridge}.
+
+\subsection{XGBoost}
+We train one gradient-boosted regressor per output PCA coordinate. XGBoost provides flexible non-linear fits with strong tabular performance \cite{chen2016xgboost}, though at this horizon it does not outperform persistence.
+
+\subsection{LSTM}
+An LSTM sequence model consumes \(20 \times 6\) PCA windows and predicts the next 6-D PCA state. LSTMs remain a standard recurrent baseline for temporal dependencies \cite{hochreiter1997lstm}.
+
+\subsection{Naive Persistence}
+The naive predictor copies the last observed PCA state forward. In financial time series this is a critical benchmark and often strong at one-step horizon \cite{fama1970efficient}.
+
+\section{Quantum and Hybrid Approaches}
+\subsection{QRC: Photonic Reservoir + Ridge Readout}
+QRC uses a fixed photonic circuit as non-linear feature map (MerLin/Perceval backend), then trains a classical Ridge readout. We run an ablation over \((n_{\text{modes}}, n_{\text{photons}}, \text{encoding})\). Best official setting in artifacts is:
+\[
+n_{\text{modes}}=8,\quad n_{\text{photons}}=3,\quad \text{encoding}=\texttt{last}.
+\]
+
+Reservoir memory capacity is measured over lags 1--30; total memory in the saved run is \(1.0745\), indicating non-trivial temporal retention.
+
+\subsection{QKGP: Quantum Kernel Gaussian Process}
+QKGP uses a photonic feature map to build kernels and then applies GP regression per PCA coordinate:
+\begin{equation}
+\hat{\mu}_* = K(X_*,X)\left[K(X,X)+\alpha I\right]^{-1}\mathbf{y},
+\end{equation}
+\begin{equation}
+\hat{\sigma}^2_* = K(X_*,X_*) - K(X_*,X)\left[K(X,X)+\alpha I\right]^{-1}K(X,X_*).
+\end{equation}
+This model is motivated by quantum-kernel literature \cite{havlicek2019supervised,schuld2019feature,schuld2021kernel} and classical GP forecasting theory \cite{rasmussen2006gp}.
+
+\subsection{QRLSTM: Quantum-Inspired Reservoir Features + LSTM}
+QRLSTM builds fixed quantum-inspired reservoir states and feeds their temporal trajectories to an LSTM head. In our artifacts it is the strongest quantum forecaster (official one-step MAE), with near-classical baseline accuracy.
+
+\subsection{QAE and Classical AE}
+The autoencoder branch models reconstruction and latent temporal dynamics:
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Quantum AE}: classical encoder \(\rightarrow\) photonic bottleneck \(\rightarrow\) classical decoder.
+  \item \textbf{Classical AE}: same macro-architecture with classical bottleneck for controlled ablation.
+\end{itemize}
+This setup follows the quantum autoencoder paradigm \cite{romero2017qae} and standard representation learning principles \cite{hinton2006reducing}.
+
+\section{Imputation and Final Submission Output}
+Missing-row imputation combines local temporal neighbors with masked reconstruction (QAE branch when available). Future rows are generated from forecast artifacts. The pipeline stage producing \texttt{results.xlsx} currently assembles forecasts through an ensemble object for workbook generation, while the judge-facing Streamlit view prioritizes best-model interpretability in dedicated pages.
+
+\section{Empirical Results}
+\subsection{Official One-Step Forecast Metrics: Classical}
+\begin{table}[H]
+\centering
+\caption{Classical baselines on official one-step validation (original price space).}
+\begin{tabular}{lrrrrr}
+\toprule
+Model & MAE & RMSE & MAPE (\%) & \(R^2\) & Max Error \\
+\midrule
+Naive Persistence & \textbf{0.002556} & \textbf{0.003477} & \textbf{1.3796} & \textbf{0.998733} & \textbf{0.018030} \\
+Ridge & 0.002847 & 0.003880 & 1.5974 & 0.998423 & 0.018050 \\
+LSTM & 0.004169 & 0.005914 & 2.4928 & 0.996336 & 0.032804 \\
+XGBoost & 0.004202 & 0.006085 & 2.3614 & 0.996121 & 0.030313 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Official One-Step Forecast Metrics: Quantum/Hybrid}
+\begin{table}[H]
+\centering
+\caption{Quantum and hybrid forecasting models on official one-step validation.}
+\begin{tabular}{lrrrl}
+\toprule
+Model & MAE & RMSE & \(R^2\) & Notes \\
+\midrule
+QRLSTM & \textbf{0.002721} & \textbf{0.003637} & \textbf{0.998538} & hybrid reservoir + LSTM \\
+QRC & 0.015715 & 0.019664 & 0.959495 & best ablation: 8 modes, 3 photons, last \\
+QKGP & 0.021049 & 0.027211 & 0.922440 & fidelity kernel GP \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Reconstruction Branch (Separate Task)}
+\begin{table}[H]
+\centering
+\caption{Autoencoder reconstruction metrics (validation, original price space).}
+\begin{tabular}{lrrrr}
+\toprule
+Model & MAE & RMSE & \(R^2\) & Trainable Params \\
+\midrule
+Quantum AE & \textbf{0.003556} & \textbf{0.004727} & \textbf{0.997600} & 31,370 \\
+Classical AE & 0.004028 & 0.005700 & 0.996511 & 31,390 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Latent temporal forecasting for the QAE branch achieves MAE \(=0.016621\) and \(R^2=0.964869\) in latent space.
+
+\subsection{Auxiliary RW Validation (Non-Official)}
+\begin{table}[H]
+\centering
+\caption{Auxiliary validation against synthetic RW future surfaces (not used for official ranking).}
+\begin{tabular}{lrrr}
+\toprule
+Model & MAE & RMSE & \(R^2\) \\
+\midrule
+Naive Persistence & \textbf{0.000265} & \textbf{0.000325} & \textbf{0.999988} \\
+Ridge & 0.000877 & 0.001194 & 0.999843 \\
+QRLSTM & 0.002264 & 0.003328 & 0.998776 \\
+QAE & 0.003253 & 0.004101 & 0.998142 \\
+QRC & 0.027342 & 0.029825 & 0.901727 \\
+QKGP & 0.034276 & 0.040472 & 0.819038 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Discussion Against State of the Art}
+\subsection{Why Naive Can Beat Sophisticated Models at One Step}
+At short horizons, surface dynamics can be highly persistent. This makes one-step forecasting close to a local random-walk regime, where persistence is difficult to beat consistently. Our results align with this literature-based expectation in financial forecasting settings \cite{fama1970efficient,diebold2006yield}.
+
+\subsection{Interpretation of Quantum Model Ranking}
+QRLSTM is competitive because it combines expressive non-linear reservoir features with sequence modeling capacity. QKGP is theoretically attractive due to uncertainty quantification \cite{rasmussen2006gp}, but practical GP complexity and sample caps can limit performance. QRC remains interpretable and useful for ablation, but in this dataset the fixed readout stack is not the top forecaster.
+
+\subsection{Reconstruction vs Forecasting}
+The QAE branch is valuable for representation learning and imputation quality, not necessarily for winning one-step forecasting. Keeping this separation explicit avoids metric misinterpretation and yields a cleaner technical narrative.
+
+\subsection{Hardware Realism and Noise Considerations}
+The photonic layer choices are aligned with near-term variational photonic computation frameworks and known limitations (trainability, noise, barren plateaus) \cite{cerezo2021vqa,mcclean2018barren}. Our archived experiments include hooks for noisy simulations and additional circuit variants, supporting future hardware-aware studies.
+
+\section{Complexity and Scalability Analysis}
+\subsection{Asymptotic View}
+From an engineering perspective, the current stack spans linear, tree-based, recurrent, and kernelized learners:
+\begin{itemize}[leftmargin=1.4em]
+  \item Ridge readouts are efficient and stable for high-dimensional linearized windows.
+  \item XGBoost complexity scales with tree count and depth, usually practical at this dataset size.
+  \item LSTM/QRLSTM training scales with sequence length and hidden size and remains tractable here.
+  \item QKGP is the least scalable in sample count due kernel matrix operations.
+\end{itemize}
+
+This explains part of the observed trade-offs: methods with richer uncertainty structure (GP) can become sample-constrained, while low-variance short-horizon tasks strongly reward simple and stable predictors.
+
+\subsection{Practical Runtime Considerations in This Repository}
+The implementation already includes practical controls:
+\begin{enumerate}[leftmargin=1.4em]
+  \item capped GP samples in \texttt{fit\_from\_pca(max\_samples=220)},
+  \item deterministic artifact caching (\texttt{*.npy}, \texttt{*.pkl}, \texttt{*.json}),
+  \item separate training phases to avoid recomputation in the judge app.
+\end{enumerate}
+
+\begin{table}[H]
+\centering
+\caption{Qualitative complexity profile of implemented model families.}
+\begin{tabular}{p{2.4cm}p{4.2cm}p{3.0cm}p{4.2cm}}
+\toprule
+Family & Main training cost driver & Inference profile & Scalability note \\
+\midrule
+Ridge / Naive & linear algebra on flattened windows & very fast & strong baseline for short horizon \\
+XGBoost & number of trees, depth, features & fast to moderate & robust tabular non-linearity \\
+LSTM / QRLSTM & epochs \(\times\) sequence length \(\times\) hidden size & moderate & good temporal expressiveness \\
+QRC + Ridge & quantum feature extraction + linear readout & moderate & feature cost dominates for large batches \\
+QKGP & kernel matrix build/inversion & moderate to high & sample-limited due GP scaling \\
+QAE branch & autoencoder epochs + latent temporal fit & moderate & useful for reconstruction/imputation \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{State-of-the-Art Mapping}
+Table \ref{tab:sota_map} makes explicit how each implemented component connects to established literature.
+
+\begin{table}[H]
+\centering
+\caption{Implemented components and corresponding state-of-the-art references.}
+\label{tab:sota_map}
+\begin{tabular}{p{3.0cm}p{6.6cm}p{4.8cm}}
+\toprule
+Component & Role in this submission & Main references \\
+\midrule
+PCA compression & low-dimensional latent factors for forecasting windows & \cite{jolliffe2002pca} \\
+Ridge baseline & regularized linear predictor in PCA/window space & \cite{hoerl1970ridge} \\
+XGBoost baseline & non-linear tree ensemble baseline & \cite{chen2016xgboost} \\
+LSTM baseline & recurrent temporal baseline in PCA space & \cite{hochreiter1997lstm} \\
+QRC & fixed photonic reservoir + classical readout & \cite{jaeger2001echo,fujii2017quantumreservoir} \\
+QKGP & quantum-kernel feature map + GP regression & \cite{havlicek2019supervised,schuld2019feature,schuld2021kernel,rasmussen2006gp} \\
+QRLSTM & hybrid quantum-inspired reservoir features + sequence model & \cite{fujii2017quantumreservoir,hochreiter1997lstm} \\
+QAE / Classical AE & reconstruction and latent dynamics branch & \cite{romero2017qae,hinton2006reducing} \\
+Temporal validation & time-ordered splitting and forecasting evaluation & \cite{bergmeir2018crossval} \\
+Financial baseline interpretation & persistence / random-walk consistency checks & \cite{fama1970efficient,diebold2006yield,brace1997market} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Engineering, Reproducibility, and Submission Readiness}
+\subsection{Reproducibility Checklist}
+\begin{itemize}[leftmargin=1.4em]
+  \item Clean entrypoint: \texttt{python run\_pipeline.py}
+  \item Deterministic artifact locations: \texttt{trained\_models/}, \texttt{data/results.xlsx}
+  \item Streamlit judge view: \texttt{streamlit run app.py}
+  \item Cross-platform setup in repository docs (Windows and Linux/macOS commands)
+\end{itemize}
+
+\subsection{Repository Hygiene}
+Unused/legacy resources were moved to \texttt{archive/} and documented. The active submission path is kept concise and traceable for judges.
+
+\section{Limitations and Next Steps}
+\begin{enumerate}[leftmargin=1.4em]
+  \item \textbf{Hyperparameter breadth}: expand search for PCA dimension, lookback, and model-specific regularization.
+  \item \textbf{Uncertainty reporting}: calibrate predictive intervals for QKGP and hybrid models, and assess reliability diagrams.
+  \item \textbf{True multi-step training}: include direct multi-horizon training for all model families, not only selected branches.
+  \item \textbf{Hardware-aware validation}: extend noisy photonic simulations and robustness stress tests.
+  \item \textbf{Scalability}: benchmark latency and memory under increased sample counts and model ensembles.
+\end{enumerate}
+
+\section{Conclusion}
+The submission delivers a complete and reproducible benchmark of classical and quantum approaches for swaption surface forecasting and imputation. On the official one-step workflow, Naive Persistence remains the best classical baseline, while QRLSTM is the strongest quantum/hybrid forecaster. The quantum autoencoder improves reconstruction over a matched classical bottleneck, supporting the value of quantum-enhanced latent representations for surface reconstruction tasks.
+
+Overall, the main contribution is not a single universally dominant model, but a rigorous comparative framework: transparent preprocessing, consistent metrics, clear separation between official and auxiliary validation, and a judge-facing interface that maps code artifacts to interpretable outcomes.
+
+\appendix
+\section{Reproduction Commands}
+\begin{verbatim}
+python -m venv .venv
+# Windows
+.venv\Scripts\Activate.ps1
+# Linux/macOS
+source .venv/bin/activate
+pip install -r requirements.txt
+python run_pipeline.py
+streamlit run app.py
+\end{verbatim}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

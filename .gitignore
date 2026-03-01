@@ -10,6 +10,16 @@ venv/
 # Notebook outputs / generated artifacts
 outputs/
 
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.bbl
+*.blg
+*.toc
+*.lof
+*.lot
+
 # Jupyter checkpoints
 .ipynb_checkpoints/
 

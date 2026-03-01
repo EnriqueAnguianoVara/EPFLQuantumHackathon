@@ -1,5 +1,10 @@
 # Core dependencies for the official workflow and Streamlit judge view.
 # Keep this file lean to reduce environment creation time.
+#
+# System dependency (not installable with pip):
+# - A LaTeX distribution providing `pdflatex` for report compilation.
+#   Windows: MiKTeX
+#   Linux: TeX Live (texlive-latex-base / texlive-full)
 
 # Core data and preprocessing
 numpy>=2.0,<3.0
