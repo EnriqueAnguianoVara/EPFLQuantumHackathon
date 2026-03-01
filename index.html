@@ -632,8 +632,103 @@ h3{font-family:'Instrument Serif',serif;font-size:1.25rem;font-weight:400}
   </div>
 </section>
 
-<!-- S16: TRANSFORMER ARCHITECTURE -->
+<!-- S16: VARQITE TRANSFORMER ARCHITECTURE -->
 <section class="slide" id="s16">
+  <div class="slide-inner">
+    <div class="slide-num">10 — Next Steps</div>
+    <h2><span style="color:var(--cyan)">Qubit-Based Quantum Transformer</span> <span style="font-size:0.5em;color:var(--t3)">(VarQITE — Future Work)</span></h2>
+    <p class="sub">Variational Quantum Imaginary Time Evolution transformer — encodes each time-step into a qubit state, applies a fixed reservoir, then learns Q/K/V projections via trainable quantum circuits.</p>
+    <div class="arch-diagram" style="padding:1.2rem">
+      <svg viewBox="0 0 1060 160" xmlns="http://www.w3.org/2000/svg">
+        <!-- PCA -->
+        <rect x="10" y="50" width="70" height="60" rx="6" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+        <text x="45" y="75" text-anchor="middle" fill="#e8ecf4" font-family="Space Mono,monospace" font-size="10">PCA</text>
+        <text x="45" y="92" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="8">5d → [0,1]</text>
+        <path d="M 85 80 L 110 80" stroke="#00e5ff" stroke-width="1.5" fill="none" marker-end="url(#arrowCyan)"/>
+        <!-- Qubit Encoder -->
+        <rect x="115" y="40" width="120" height="80" rx="6" fill="rgba(0,229,255,0.05)" stroke="var(--cyan)" stroke-width="1.5"/>
+        <text x="175" y="62" text-anchor="middle" fill="var(--cyan)" font-family="Space Mono,monospace" font-size="9">Qubit</text>
+        <text x="175" y="76" text-anchor="middle" fill="var(--cyan)" font-family="Space Mono,monospace" font-size="9">Encoder</text>
+        <text x="175" y="94" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">H⊗n → RY/RZ</text>
+        <text x="175" y="107" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">data re-upload</text>
+        <path d="M 240 80 L 265 80" stroke="#00e5ff" stroke-width="1.5" fill="none" marker-end="url(#arrowCyan)"/>
+        <!-- Qubit Reservoir -->
+        <rect x="270" y="40" width="130" height="80" rx="6" fill="rgba(105,240,174,0.05)" stroke="var(--green)" stroke-width="1.5"/>
+        <text x="335" y="62" text-anchor="middle" fill="var(--green)" font-family="Space Mono,monospace" font-size="9">Qubit</text>
+        <text x="335" y="76" text-anchor="middle" fill="var(--green)" font-family="Space Mono,monospace" font-size="9">Reservoir</text>
+        <text x="335" y="94" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">FIXED · 4q, 3 layers</text>
+        <text x="335" y="107" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">U3 + CZ brick-wall</text>
+        <path d="M 405 80 L 430 80" stroke="#00e5ff" stroke-width="1.5" fill="none" marker-end="url(#arrowCyan)"/>
+        <!-- VarQITE -->
+        <rect x="435" y="35" width="150" height="90" rx="6" fill="rgba(206,147,216,0.08)" stroke="var(--purple)" stroke-width="1.5"/>
+        <text x="510" y="57" text-anchor="middle" fill="var(--purple)" font-family="Space Mono,monospace" font-size="9" font-weight="700">VarQITE</text>
+        <text x="510" y="72" text-anchor="middle" fill="var(--purple)" font-family="Space Mono,monospace" font-size="8">Imaginary Time</text>
+        <text x="510" y="88" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">∂τ|ψ⟩ = -H|ψ⟩</text>
+        <text x="510" y="101" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">McLachlan var.</text>
+        <text x="510" y="114" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">collapse → ⟨Z_i⟩</text>
+        <path d="M 590 80 L 615 80" stroke="#00e5ff" stroke-width="1.5" fill="none" marker-end="url(#arrowCyan)"/>
+        <!-- Quantum Attention -->
+        <rect x="620" y="40" width="140" height="80" rx="6" fill="rgba(255,112,67,0.05)" stroke="var(--orange)" stroke-width="1.5"/>
+        <text x="690" y="62" text-anchor="middle" fill="var(--orange)" font-family="Space Mono,monospace" font-size="9">Quantum</text>
+        <text x="690" y="76" text-anchor="middle" fill="var(--orange)" font-family="Space Mono,monospace" font-size="9">Attention</text>
+        <text x="690" y="92" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">2 heads · Q,K,V</text>
+        <text x="690" y="105" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">RY/RZ + CNOT</text>
+        <path d="M 765 80 L 795 80" stroke="#00e5ff" stroke-width="1.5" fill="none" marker-end="url(#arrowCyan)"/>
+        <!-- MLP Readout -->
+        <rect x="800" y="50" width="90" height="60" rx="6" fill="rgba(105,240,174,0.05)" stroke="var(--green)" stroke-width="1.5"/>
+        <text x="845" y="75" text-anchor="middle" fill="var(--green)" font-family="Space Mono,monospace" font-size="9">MLP</text>
+        <text x="845" y="92" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="8">ŷ_{t+h}</text>
+      </svg>
+    </div>
+    <div style="margin-top:1rem">
+      <span class="tag tag-cyan">Qubit Encoding</span>
+      <span class="tag tag-green">Fixed Reservoir</span>
+      <span class="tag tag-purple">VarQITE</span>
+      <span class="tag tag-orange">Quantum Attention</span>
+    </div>
+  </div>
+</section>
+
+<!-- S17: VARQITE DETAILS -->
+<section class="slide" id="s17">
+  <div class="slide-inner">
+    <div class="slide-num">10 — Next Steps (VarQITE Details)</div>
+    <h2><span style="color:var(--cyan)">VarQITE Transformer:</span> How It Works</h2>
+    <div class="g2">
+      <div>
+        <div class="card" style="border-color:rgba(0,229,255,0.25)">
+          <h3 style="color:var(--cyan)">VarQITE Core</h3>
+          <p>Variational Quantum Imaginary Time Evolution:<br><br>
+          $\partial_\tau|\psi(\tau)\rangle = -H|\psi(\tau)\rangle$<br><br>
+          McLachlan variational principle projects the flow onto a parameterised manifold $|\psi(\boldsymbol{\theta})\rangle$:<br>
+          $M_{jk}\dot{\theta}_k = -\text{Re}\langle\partial_j\psi|H|\psi\rangle$<br><br>
+          Collapses quantum state to classical features $\langle Z_i\rangle$ <em>before</em> attention — simpler but less expressive than AGP-Krylov.</p>
+        </div>
+        <div class="card" style="margin-top:1rem">
+          <h3 style="color:var(--green)">Qubit Reservoir</h3>
+          <p>4 qubits, 3 layers · Fixed random U3 + brick-wall CZ + long-range CX<br>
+          Output: expectation values $\langle Z_i\rangle \in [-1,1]$<br>
+          QRC philosophy — reservoir never trained</p>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="border-color:rgba(255,112,67,0.2)">
+          <h3 style="color:var(--orange)">Quantum Attention + Hybrid Training</h3>
+          <p>2 attention heads · Q, K, V as <strong>trainable RY/RZ + CNOT circuits</strong><br>
+          Causal-masked scaled dot-product attention<br>
+          Qiskit Statevector simulation<br><br>
+          <strong>Hybrid training:</strong><br>
+          &bull; Readout MLP → Adam (classical backprop)<br>
+          &bull; Quantum attention → parameter-shift rule: $\nabla_j L \approx \frac{L(\theta_j{+}\frac{\pi}{2}) - L(\theta_j{-}\frac{\pi}{2})}{2}$</p>
+        </div>
+        <div class="insight cyan" style="margin-top:0.6rem"><strong>VarQITE limitation:</strong> Collapses quantum features to classical expectation values $\langle Z_i\rangle$ <em>before</em> the attention mechanism — losing entanglement information. The AGP-Krylov approach (next slide) addresses this by operating in Hilbert space before measurement.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S18: AGP-KRYLOV TRANSFORMER ARCHITECTURE -->
+<section class="slide" id="s18">
   <div class="slide-inner">
     <div class="slide-num">10 — Next Steps</div>
     <h2><span style="color:var(--purple)">Photonic AGP-Krylov Transformer</span> <span style="font-size:0.5em;color:var(--t3)">(Future Work)</span></h2>
@@ -688,8 +783,8 @@ h3{font-family:'Instrument Serif',serif;font-size:1.25rem;font-weight:400}
   </div>
 </section>
 
-<!-- S17: TRANSFORMER DETAILS -->
-<section class="slide" id="s17">
+<!-- S19: TRANSFORMER DETAILS -->
+<section class="slide" id="s19">
   <div class="slide-inner">
     <div class="slide-num">10 — Next Steps (Details)</div>
     <h2><span style="color:var(--purple)">AGP-Krylov Transformer:</span> How It Works</h2>
@@ -728,9 +823,9 @@ h3{font-family:'Instrument Serif',serif;font-size:1.25rem;font-weight:400}
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- S18: RANDOM WALK DISCOVERY -->
+<!-- S20: RANDOM WALK DISCOVERY -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<section class="slide" id="s18">
+<section class="slide" id="s20">
   <div class="slide-inner">
     <div class="slide-num">11 — Key Finding</div>
     <h2>The Dataset is a <span style="color:var(--gold)">Random Walk</span></h2>
@@ -763,9 +858,9 @@ h3{font-family:'Instrument Serif',serif;font-size:1.25rem;font-weight:400}
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- S19: FORECASTING METHODOLOGY (NEW) -->
+<!-- S21: FORECASTING METHODOLOGY -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<section class="slide" id="s19">
+<section class="slide" id="s21">
   <div class="slide-inner">
     <div class="slide-num">11 — Forecasting Strategy</div>
     <h2>Random Walk–Based <span style="color:var(--green)">Forecast Generation</span></h2>
@@ -802,9 +897,9 @@ h3{font-family:'Instrument Serif',serif;font-size:1.25rem;font-weight:400}
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- S20: RESULTS TABLE -->
+<!-- S22: RESULTS TABLE -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<section class="slide" id="s20">
+<section class="slide" id="s22">
   <div class="slide-inner">
     <div class="slide-num">12 — Results</div>
     <h2><span style="color:var(--cyan)">Quantum</span> vs <span style="color:var(--orange)">Classical</span></h2>
@@ -888,9 +983,9 @@ h3{font-family:'Instrument Serif',serif;font-size:1.25rem;font-weight:400}
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- S21: RESULTS VISUALIZATION (NEW) -->
+<!-- S23: RESULTS VISUALIZATION -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<section class="slide" id="s21">
+<section class="slide" id="s23">
   <div class="slide-inner">
     <div class="slide-num">12 — Results (Visual)</div>
     <h2>All Models <span style="color:var(--cyan)">Compared</span></h2>
@@ -962,9 +1057,9 @@ h3{font-family:'Instrument Serif',serif;font-size:1.25rem;font-weight:400}
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- S22: INSIGHTS -->
+<!-- S24: INSIGHTS -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<section class="slide" id="s22">
+<section class="slide" id="s24">
   <div class="slide-inner">
     <div class="slide-num">13 — Key Insights</div>
     <h2>What We <span style="color:var(--purple)">Learned</span></h2>
@@ -991,9 +1086,9 @@ h3{font-family:'Instrument Serif',serif;font-size:1.25rem;font-weight:400}
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- S23: THANK YOU -->
+<!-- S25: THANK YOU -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<section class="slide" id="s23">
+<section class="slide" id="s25">
   <div class="slide-inner" style="text-align:center">
     <h1>Thank You</h1>
     <p class="sub" style="font-size:1.3rem;margin-top:1.5rem">Questions?</p>
