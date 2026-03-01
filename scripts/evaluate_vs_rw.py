@@ -92,6 +92,7 @@ def main() -> int:
     }
 
     results = {}
+    per_horizon_mae = {}
     for name, fname in model_files.items():
         if fname is None:
             continue
@@ -101,6 +102,13 @@ def main() -> int:
         pred = np.load(p)
         if pred.shape != rw_truth.shape:
             continue
+
+        # Horizon-wise MAE: one value per forecast day (h=1..6)
+        horizon_mae = np.mean(np.abs(pred - rw_truth), axis=1)
+        per_horizon_mae[name] = {
+            f"h{h+1}": float(v) for h, v in enumerate(horizon_mae)
+        }
+
         m = all_metrics(rw_truth, pred)
         results[name] = {
             "MAE": float(m["MAE"]),
@@ -113,6 +121,10 @@ def main() -> int:
 
     sorted_rows = sorted(results.items(), key=lambda kv: kv[1]["MAE"])
     best_model, best_metrics = sorted_rows[0]
+    best_model_by_avg_horizon = min(
+        per_horizon_mae.items(),
+        key=lambda kv: float(np.mean(list(kv[1].values()))),
+    )[0]
 
     out = {
         "note": "Auxiliary RW validation only; not part of official challenge benchmark.",
@@ -121,6 +133,8 @@ def main() -> int:
         "n_points": int(rw_truth.shape[1]),
         "best_model_by_mae": best_model,
         "best_model_metrics": best_metrics,
+        "best_model_by_avg_horizon_mae": best_model_by_avg_horizon,
+        "per_horizon_mae": per_horizon_mae,
         "results": {k: v for k, v in sorted_rows},
     }
 

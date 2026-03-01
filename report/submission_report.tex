@@ -224,6 +224,29 @@ QKGP & 0.034276 & 0.040472 & 0.819038 \\
 \end{tabular}
 \end{table}
 
+\subsection{Auxiliary Horizon-Wise Error Profile (\(h=1\ldots6\))}
+To avoid over-interpreting a single aggregated metric, we also report MAE per forecast horizon in the RW auxiliary experiment.
+Since this auxiliary check uses one 6-day RW path (224 points per day), non-monotonic horizon-to-horizon fluctuations are statistically expected.
+
+\begin{table}[H]
+\centering
+\caption{Auxiliary RW MAE by horizon step.}
+\begin{tabular}{lrrrrrrr}
+\toprule
+Model & \(h_1\) & \(h_2\) & \(h_3\) & \(h_4\) & \(h_5\) & \(h_6\) & Avg \\
+\midrule
+Naive Persistence & \textbf{0.000135} & \textbf{0.000229} & \textbf{0.000237} & \textbf{0.000316} & \textbf{0.000367} & \textbf{0.000309} & \textbf{0.000265} \\
+Ridge & 0.000368 & 0.000538 & 0.000797 & 0.001058 & 0.001310 & 0.001190 & 0.000877 \\
+QRLSTM & 0.000600 & 0.001347 & 0.001968 & 0.002649 & 0.003266 & 0.003755 & 0.002264 \\
+QAE & 0.002302 & 0.002341 & 0.002570 & 0.003223 & 0.003991 & 0.005090 & 0.003253 \\
+QRC & 0.026719 & 0.027744 & 0.027253 & 0.027465 & 0.027473 & 0.027399 & 0.027342 \\
+QKGP & 0.051658 & 0.032347 & 0.049751 & 0.029791 & 0.011761 & 0.030351 & 0.034276 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This profile supports the same qualitative conclusion: naive persistence is strongest at very short horizons in RW-like conditions, while more complex models show larger error accumulation with horizon length. Therefore, adding \(h>1\) diagnostics strengthens robustness of interpretation, rather than changing the official benchmark definition.
+
 \section{Discussion Against State of the Art}
 \subsection{Why Naive Can Beat Sophisticated Models at One Step}
 At short horizons, surface dynamics can be highly persistent. This makes one-step forecasting close to a local random-walk regime, where persistence is difficult to beat consistently. Our results align with this literature-based expectation in financial forecasting settings \cite{fama1970efficient,diebold2006yield}.

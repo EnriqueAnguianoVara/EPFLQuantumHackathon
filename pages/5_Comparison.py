@@ -367,6 +367,52 @@ if rw_summary_path.exists():
         if rw_best_quantum is not None:
             c2.metric("Best Quantum vs RW", rw_best_quantum, f"MAE={df_rw.loc[rw_best_quantum, 'MAE']:.6f}")
         c3.metric("RW Days x Points", f"{rw_summary.get('n_days', '?')} x {rw_summary.get('n_points', '?')}")
+
+        per_h = rw_summary.get("per_horizon_mae", {})
+        if per_h:
+            st.markdown("#### Horizon-wise MAE vs RW (h=1..6)")
+            st.caption(
+                "Horizon-wise values come from a single 6-day RW path (224 points per day), "
+                "so non-monotonic fluctuations across h are expected."
+            )
+            df_h = pd.DataFrame(per_h).T
+            # Keep horizon columns sorted as h1..h6
+            horizon_cols = sorted(
+                [c for c in df_h.columns if str(c).startswith("h")],
+                key=lambda x: int(str(x)[1:]),
+            )
+            df_h = df_h[horizon_cols]
+            df_h["avg_h1_h6"] = df_h[horizon_cols].mean(axis=1)
+            best_avg = rw_summary.get("best_model_by_avg_horizon_mae")
+
+            def _highlight_horizon_rows(row):
+                if row.name == best_avg:
+                    return ["background-color: #2d5a27"] * len(row)
+                return [""] * len(row)
+
+            st.dataframe(
+                df_h.style.apply(_highlight_horizon_rows, axis=1).format("{:.6f}"),
+                use_container_width=True,
+            )
+
+            fig_h = go.Figure()
+            x_vals = list(range(1, len(horizon_cols) + 1))
+            for model_name in df_h.index:
+                fig_h.add_trace(
+                    go.Scatter(
+                        x=x_vals,
+                        y=[float(df_h.loc[model_name, c]) for c in horizon_cols],
+                        mode="lines+markers",
+                        name=model_name,
+                    )
+                )
+            fig_h.update_layout(
+                title="MAE by Forecast Horizon (RW Auxiliary)",
+                xaxis_title="Horizon step h",
+                yaxis_title="MAE",
+                height=420,
+            )
+            st.plotly_chart(fig_h, use_container_width=True)
 else:
     st.info(
         "No RW auxiliary summary found. Run:\n"
