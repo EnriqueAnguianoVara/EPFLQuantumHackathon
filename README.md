@@ -99,3 +99,9 @@ python tests/test_phase3.py
 - The official benchmark is based on challenge data only.
 - The RW validation (`scripts/evaluate_vs_rw.py`) is auxiliary and does not replace the official benchmark.
 - Trained artifacts are saved as `.pkl`, `.pt`, `.npy`, and `.json` files under `trained_models/`.
+
+## Archived Material
+
+Legacy and experimental assets that are not part of the official execution flow
+(`run_pipeline.py` + `streamlit run app.py`) were moved to `archive/`.
+See `archive/README.md` for details.
