@@ -183,7 +183,7 @@ if results_df is None:
 else:
     with open(results_path, "rb") as f:
         st.download_button(
-            label="📥 Download results.xlsx",
+            label="Download results.xlsx",
             data=f.read(),
             file_name="results.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

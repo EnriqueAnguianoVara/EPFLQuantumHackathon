@@ -370,7 +370,7 @@ if rw_summary_path.exists():
 else:
     st.info(
         "No RW auxiliary summary found. Run:\n"
-        "`python scripts/evaluate_vs_rw.py --rw-file \"C:\\Users\\jorge\\Downloads\\rw_6days.xlsx\"`"
+        "`python scripts/evaluate_vs_rw.py --rw-file path/to/rw_6days.xlsx`"
     )
 
 st.header("5. Takeaways for Judges")

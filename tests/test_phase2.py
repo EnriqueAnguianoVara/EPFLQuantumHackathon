@@ -6,7 +6,7 @@ Tests model instantiation, fit, predict, and rolling prediction
 for Ridge, XGBoost, and LSTM.
 
 Run from project root:
-    python test_phase2.py
+    python tests/test_phase2.py
 """
 
 import sys
@@ -227,7 +227,7 @@ check("Training notebook exists", os.path.exists(notebook_path), notebook_path)
 section("5. STREAMLIT PAGE (import check)")
 # ══════════════════════════════════════════════════════════════════════════
 
-page_path = str(ROOT / "pages" / "2_🔧_Classical_Baselines.py")
+page_path = str(ROOT / "pages" / "2_Classical_Baselines.py")
 check("Streamlit page exists", os.path.exists(page_path), page_path)
 
 # ══════════════════════════════════════════════════════════════════════════

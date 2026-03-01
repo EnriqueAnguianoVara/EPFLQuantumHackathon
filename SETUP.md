@@ -1,99 +1,87 @@
-# 🧪 Guía de Setup y Verificación
+# Setup and Verification Guide
 
-## 1. Instalación (una sola línea)
+This guide prepares a clean environment for running the repository on Windows and Linux.
+
+## 1. Create and activate a virtual environment
+
+### Windows (PowerShell)
 
 ```bash
-pip install numpy pandas scikit-learn openpyxl torch plotly streamlit xgboost lightgbm joblib matplotlib merlinquantum perceval-quandela
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 ```
 
-> **Nota:** Si estás en un entorno con restricciones (Colab, sistema con python gestionado), añade `--break-system-packages` al final.
-
-> **Nota 2:** Si `merlinquantum` o `perceval-quandela` fallan, instala primero el resto y luego:
-> ```bash
-> pip install merlinquantum perceval-quandela
-> ```
-> MerLin requiere Python ≥3.9 y < 3.13.
-
----
-
-## 2. Verificación rápida (sin Streamlit)
-
-Desde la raíz del proyecto (`quantum-swaptions/`), ejecuta:
+### Linux / macOS (bash/zsh)
 
 ```bash
-python test_phase1.py
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 ```
 
-Este script verifica todas las piezas de la Fase 1 sin necesitar plotly ni streamlit.
+## 2. Install dependencies
 
----
-
-## 3. Verificación completa con Streamlit
+Install core dependencies:
 
 ```bash
-cd quantum-swaptions
+pip install -r requirements.txt
+```
+
+Optional dependencies (only for extended/experimental modules):
+
+```bash
+pip install -r requirements-optional.txt
+```
+
+## 3. Run the full pipeline
+
+From repository root:
+
+```bash
+python run_pipeline.py
+```
+
+Expected outputs:
+
+- `trained_models/*.json`
+- `trained_models/*.npy`
+- `trained_models/*.pkl`
+- `trained_models/*.pt`
+- `data/results.xlsx`
+
+## 4. Launch Streamlit
+
+```bash
 streamlit run app.py
 ```
 
-Se abre en `http://localhost:8501`. Navega a **📊 Market Explorer** y verifica:
-- El slider de fecha mueve el heatmap
-- Las series temporales se dibujan al seleccionar tenors
-- El PCA muestra que 3 componentes > 99%
-- El test template muestra 6 future + 2 missing rows
+If port 8501 is busy:
 
----
-
-## 4. Qué verificar en cada módulo
-
-### `src/data/loader.py`
-```python
-from src.data.loader import load_all
-data = load_all()
-assert data['train_prices'].shape == (494, 224)
-assert len(data['test_info']['future_indices']) == 6
-assert len(data['test_info']['missing_indices']) == 2
-print("✓ loader OK")
+```bash
+streamlit run app.py --server.port 8502
 ```
 
-### `src/data/preprocessing.py`
-```python
-from src.data.preprocessing import full_pipeline
-pipe = full_pipeline(data['train_prices'], n_pca_components=6, window_size=20)
-assert pipe['X_train'].shape[1] == 20 * 6  # window_size * n_pca
-assert pipe['Y_train'].shape[1] == 6       # n_pca
-print("✓ preprocessing OK")
+## 5. Run validation scripts
+
+```bash
+python tests/test_phase1.py
+python tests/test_phase2.py
+python tests/test_phase3.py
 ```
 
-### `src/utils/surface.py`
-```python
-from src.utils.surface import flat_to_grid, grid_to_flat
-import numpy as np
-flat = data['train_prices'][0]
-grid = flat_to_grid(flat)
-assert grid.shape == (14, 16)
-assert np.allclose(flat, grid_to_flat(grid))
-print("✓ surface OK")
-```
+## 6. Common issues
 
-### `src/evaluation/metrics.py`
-```python
-from src.evaluation.metrics import all_metrics
-import numpy as np
-y = np.random.randn(10, 224)
-m = all_metrics(y, y + 0.01 * np.random.randn(10, 224))
-assert 'MAE' in m and 'RMSE' in m and 'R²' in m
-print("✓ metrics OK")
-```
+| Issue | Fix |
+|---|---|
+| `ModuleNotFoundError: No module named 'src'` | Run commands from repository root. |
+| `streamlit` command not found | Activate `.venv` first or run `python -m streamlit run app.py`. |
+| `merlinquantum` installation fails | Use Python 3.10-3.12 and update `pip`. |
+| Missing output artifacts in Streamlit | Run `python run_pipeline.py` first. |
+| RW validation file not found | Provide a valid file path to `scripts/evaluate_vs_rw.py --rw-file ...`. |
 
----
+## 7. Compatibility
 
-## 5. Problemas comunes
-
-| Problema | Solución |
-|----------|----------|
-| `ModuleNotFoundError: No module named 'src'` | Ejecuta desde la raíz del proyecto `quantum-swaptions/`, o añade `sys.path.insert(0, '/ruta/al/quantum-swaptions')` |
-| `plotly` no se instala | `pip install plotly==5.18.0` (versión específica) |
-| `merlinquantum` falla al instalar | Verifica Python 3.9-3.12. En Mac M1/M2: `pip install --no-binary :all: merlinquantum` |
-| Streamlit no abre | Verifica que el puerto 8501 esté libre. Usa `streamlit run app.py --server.port 8502` |
-| `FileNotFoundError: train.xlsx` | Asegúrate de que `data/train.xlsx` existe en el directorio del proyecto |
-| Las fechas se parsean mal | El loader asume formato `dd/mm/yyyy` (dayfirst=True). Si tu Excel guarda otro formato, ajusta en `loader.py` |
+- Windows: tested with PowerShell and Python virtual environments
+- Linux/macOS: tested with standard `venv` and `bash/zsh`
+- Recommended Python versions: `3.10`, `3.11`, `3.12`

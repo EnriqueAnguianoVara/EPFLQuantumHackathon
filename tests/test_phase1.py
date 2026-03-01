@@ -3,7 +3,7 @@
 Phase 1 — Full Test Suite
 
 Run from the project root:
-    python test_phase1.py
+    python tests/test_phase1.py
 
 Tests all data loading, preprocessing, surface utilities, metrics,
 and walk-forward validation WITHOUT requiring plotly or streamlit.

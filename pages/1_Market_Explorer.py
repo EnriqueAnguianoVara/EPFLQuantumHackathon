@@ -129,7 +129,7 @@ c7.metric("Grid Shape", f"{N_TENORS} × {N_MATURITIES}")
 c8.metric("Date Range", f"{dates[0]} → {dates[-1]}")
 
 # Correlation matrix
-with st.expander("📐 Correlation Matrix (subsampled every 10th column)"):
+with st.expander("Correlation Matrix (subsampled every 10th column)"):
     fig_corr = plot_correlation_matrix(prices, step=10)
     st.plotly_chart(fig_corr, use_container_width=True)
     st.markdown(

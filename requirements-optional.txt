@@ -1,0 +1,8 @@
+# Optional dependencies for extended experiments.
+# These are not required for the official pipeline or Streamlit judge view.
+
+# Alternative classical backend
+lightgbm>=4.5,<5.0
+
+# Experimental quantum transformer modules
+qiskit>=1.0,<2.0

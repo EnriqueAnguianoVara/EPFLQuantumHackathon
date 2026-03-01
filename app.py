@@ -1,28 +1,14 @@
-"""
-Submission-ready Streamlit home page for judges.
-"""
+"""Streamlit home page for judge-facing project review."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import streamlit as st
 
 
 ROOT = Path(__file__).resolve().parent
-TRAINED_DIR = ROOT / "trained_models"
 LOGO_PATH = ROOT / "assets" / "Logo_INVIQTVS.jpeg"
-
-
-def _safe_load_json(path: Path):
-    if not path.exists():
-        return None
-    try:
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
 
 st.set_page_config(
     page_title="Quantum Swaptions - INVIQTVS",
@@ -42,7 +28,7 @@ st.title("Quantum Swaptions - Judge Presentation")
 st.caption("Team INVIQTVS | EPFL/Quandela challenge submission view.")
 
 st.sidebar.markdown("## Judge Navigation")
-st.sidebar.markdown("Use pages in order: 1 → 2 → 3 → 5 → 6")
+st.sidebar.markdown("Use pages in order: 1 -> 2 -> 3 -> 5 -> 6")
 
 col_a, col_b, col_c = st.columns(3)
 col_a.metric("Dataset", "494 x 224")
@@ -55,7 +41,7 @@ st.markdown(
 1. **Market Explorer**: data structure and volatility surface behavior.
 2. **Classical Baselines**: Ridge/XGBoost/LSTM/Naive reference.
 3. **Quantum Approaches**: QRC, QKGP, QRLSTM, QAE analysis.
-4. **Comparison**: side-by-side metrics and auxiliary RW sanity check (non-official).
+4. **Comparison**: side-by-side metrics and auxiliary RW sanity check.
 5. **Predictions**: final 6-day forecast surfaces and submission output.
 """
 )

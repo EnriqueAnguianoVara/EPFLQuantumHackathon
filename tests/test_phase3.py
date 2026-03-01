@@ -6,7 +6,7 @@ Tests circuit builders, reservoir, and autoencoder.
 Requires: merlinquantum, perceval-quandela, torch
 
 Run from project root:
-    python test_phase3.py
+    python tests/test_phase3.py
 """
 
 import sys
@@ -283,8 +283,8 @@ files = [
     "src/models/quantum/__init__.py",
     "notebooks/03_quantum_reservoir.py",
     "notebooks/04_quantum_autoencoder.py",
-    "pages/3_⚛️_Quantum_Reservoir.py",
-    "pages/4_🧬_Quantum_Autoencoder.py",
+    "pages/3_Quantum_Approaches.py",
+    "pages/5_Comparison.py",
 ]
 for f in files:
     check(f"File exists: {f}", os.path.exists(os.path.join(base, f)))

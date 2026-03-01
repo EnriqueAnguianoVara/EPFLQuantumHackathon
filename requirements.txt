@@ -1,26 +1,21 @@
-# Direct dependencies used by the repository.
-# This file intentionally lists top-level packages only.
-# Transitive dependencies (altair, attrs, pyarrow, exqalibur, etc.) are
-# resolved by pip from the packages below and should not be pinned here.
+# Core dependencies for the official workflow and Streamlit judge view.
+# Keep this file lean to reduce environment creation time.
 
-# Core data / preprocessing
+# Core data and preprocessing
 numpy>=2.0,<3.0
 pandas>=2.2,<3.0
 scipy>=1.13,<2.0
 scikit-learn>=1.5,<2.0
 openpyxl>=3.1,<4.0
 
-# Visualisation / Streamlit app
-matplotlib>=3.8,<4.0
+# App and plotting
 plotly>=5.20,<7.0
 streamlit>=1.40,<2.0
 
-# Classical models
+# Classical models used in the main pipeline
 torch>=2.4,<3.0
 xgboost>=2.1,<4.0
-lightgbm>=4.5,<5.0
 
-# Quantum / photonic models
+# Quantum / photonic stack used in the main pipeline
 perceval-quandela>=1.1,<2.0
 merlinquantum>=0.3,<1.0
-qiskit>=1.0,<2.0
