@@ -15,20 +15,24 @@ This project benchmarks classical and quantum approaches for swaption surface fo
 
 ```
 .
-|-- app.py                       # Streamlit home page
-|-- pages/                       # Streamlit pages
+|-- app.py                        # Streamlit home page
+|-- pages/                        # Streamlit pages
 |-- src/
-|   |-- data/                    # Loaders and preprocessing
-|   |-- models/                  # Classical and quantum models
-|   |-- evaluation/              # Metrics and diagnostics
-|   `-- utils/                   # Surface utilities and Excel writer
-|-- notebooks/                   # Executable pipeline scripts (.py format)
-|-- scripts/                     # Helper scripts (e.g. RW validation)
-|-- trained_models/              # Generated artifacts
-|-- data/                        # Challenge datasets + output workbook
-|-- run_pipeline.py              # Full end-to-end pipeline runner
-|-- requirements.txt             # Core dependencies
-`-- requirements-optional.txt    # Optional/experimental dependencies
+|   |-- data/                     # Loaders and preprocessing
+|   |-- models/                   # Classical and quantum models
+|   |-- evaluation/               # Metrics and walk-forward tools
+|   `-- utils/                    # Surface utilities and Excel writer
+|-- notebooks/                    # Executable pipeline scripts (.py format)
+|-- scripts/                      # Helper scripts (e.g. RW validation)
+|-- tests/                        # Validation scripts used in setup checks
+|-- data/                         # Challenge datasets + output workbook
+|-- trained_models/               # Generated artifacts
+|-- assets/                       # Team logo and UI assets
+|-- .streamlit/                   # Streamlit configuration
+|-- archive/                      # Legacy and reference material (non-official flow)
+|-- run_pipeline.py               # Full end-to-end pipeline runner
+|-- requirements.txt              # Core dependencies
+`-- requirements-optional.txt     # Optional/experimental dependencies
 ```
 
 ## Python Version
