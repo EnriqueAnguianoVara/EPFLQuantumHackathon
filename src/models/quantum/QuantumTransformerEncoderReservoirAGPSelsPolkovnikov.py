@@ -1,55 +1,42 @@
 """
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║   PHOTONIC QLA-TRANSFORMER + BOSON SAMPLING RESERVOIR                          ║
+║   PHOTONIC AGP-KRYLOV TRANSFORMER + BOSON SAMPLING RESERVOIR                   ║
 ║   Adapted for Quandela Perceval / MerLin                                       ║
 ╠══════════════════════════════════════════════════════════════════════════════════╣
 ║                                                                                 ║
 ║  PIPELINE (Photonic)                                                            ║
 ║  ──────────────────────────────────────────────────────────────────────────     ║
 ║                                                                                 ║
-║  x_t ──► PhotonicEncoder ──► BosonSamplingReservoir ──► P(n₁,...,nₘ)          ║
+║  x_t ──► PhotonicEncoder ──► BosonSamplingReservoir ──► U(λ_t)               ║
 ║           (angle-encoded       (fixed random                │                  ║
 ║            phase shifters)      interferometer)              ▼                  ║
-║                                                    ClassicalVarQITE-SVD        ║
+║                                              AGP-Krylov Counterdiabatic        ║
 ║                                       ┌────────────────────────────────┐       ║
-║                                       │  H = -Σ_t |f_t⟩⟨f_t|          │       ║
-║                                       │  McLachlan on feature vectors  │       ║
-║                                       │  A_ij = Re[QGT_ij] (finite    │       ║
-║                                       │    difference on photonic     │       ║
-║                                       │    circuit outputs)            │       ║
-║                                       │  solve (A+λI)δθ = C            │       ║
+║                                       │  H_t = i·logm(U_t)             │       ║
+║                                       │  δH = temporal derivative        │       ║
+║                                       │  Krylov basis {O_k} from        │       ║
+║                                       │    nested commutators           │       ║
+║                                       │  solve K×K system: Mα = b       │       ║
+║                                       │  U_CD = U_t · exp(-iΣα_k·O_k) │       ║
 ║                                       └────────────┬───────────────────┘       ║
-║                                                     │ compressed f(θ*)         ║
+║                                                     │ CD-corrected circuits    ║
 ║                                                     ▼                          ║
 ║                                       PhotonicAttention (Q,K,V)                ║
 ║                                       trainable interferometers on             ║
-║                                       compressed features                      ║
+║                                       corrected circuits                       ║
 ║                                                     │                          ║
 ║                                                     ▼                          ║
 ║                                       Classical Readout ──► ŷ_{t+h}           ║
 ║                                                                                 ║
-║  KEY ADAPTATIONS FROM QUBIT → PHOTONIC                                         ║
+║  AGP-KRYLOV APPROACH (Sels & Polkovnikov 2017, Claeys et al. 2019)            ║
 ║  ──────────────────────────────────────────────────────────────────────────     ║
 ║                                                                                 ║
-║  • Qiskit gates (RY, RZ, CX, CZ)  →  Perceval (BS, PS, GenericInterferometer)║
-║  • Pauli-Z expectation ⟨Z_i⟩      →  Mode occupation probabilities P(n_i)     ║
-║  • Statevector simulation          →  Perceval probability computation         ║
-║  • Qubit reservoir (random U3+CZ)  →  Boson sampling reservoir                ║
-║    (fixed random interferometer with photon-count histograms)                  ║
-║  • VarQITE on statevectors         →  VarQITE on photonic output              ║
-║    distributions (feature vectors from Fock probabilities)                     ║
-║  • Quantum attention circuits      →  Perceval trainable interferometers       ║
-║    with QuantumLayer + LexGrouping                                             ║
-║                                                                                 ║
-║  MATH (unchanged principle)                                                     ║
-║  ──────────────────────────────────────────────────────────────────────────     ║
-║                                                                                 ║
-║  VarQITE finds the dominant principal component of the reservoir feature       ║
-║  trajectory {f_t} by evolving a parametrised photonic ansatz under:            ║
-║      dθ_i/dτ = Σ_j A^{-1}_{ij} C_j                                           ║
-║  where A is the QGT (Fubini-Study metric) and C is the energy gradient,       ║
-║  both computed via finite-difference / parameter-shift on the photonic         ║
-║  circuit output probabilities.                                                  ║
+║  The Adiabatic Gauge Potential A_λ satisfies [H, A_λ] = ∂_λH.                ║
+║  Variational ansatz: A_λ ≈ Σ_k α_k O_k with Krylov basis:                    ║
+║      O_1 = δH,   O_k = i·[H, O_{k-1}]   (Hermitianised)                     ║
+║  Coefficients α found from K×K linear system (K ≈ 3, microseconds).           ║
+║  The CD correction embeds temporal dynamics (dx/dt, d²x/dt², ...)              ║
+║  into the unitary itself — no intermediate collapse to classical vectors.      ║
 ║                                                                                 ║
 ║  Requirements: pip install perceval-quandela merlinquantum torch numpy         ║
 ║                         matplotlib scipy openpyxl pandas scikit-learn          ║
@@ -61,7 +48,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import perceval as pcvl
-from scipy.linalg import solve as scipy_solve
+from scipy.linalg import solve as scipy_solve, logm, expm, polar
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
 from typing import List, Tuple, Optional
@@ -88,12 +75,9 @@ class PhotonicQLAConfig:
     n_res_layers:      int   = 3      # reservoir interferometer depth
     reservoir_seed:    int   = 42
 
-    # ── VarQITE (on feature vectors from photonic outputs) ────────────────────
-    varqite_layers:    int   = 2      # depth of VarQITE ansatz interferometer
-    varqite_steps:     int   = 8      # imaginary time steps per forward pass
-    varqite_dtau:      float = 0.08   # imaginary time step Δτ
-    varqite_reg:       float = 1e-3   # Tikhonov λ
-    varqite_shift:     float = np.pi / 2
+    # ── AGP-Krylov (counterdiabatic correction on photonic circuits) ──────────
+    krylov_depth:      int   = 3      # Krylov subspace dimension K
+    krylov_reg:        float = 1e-4   # Tikhonov λ for Gram matrix
 
     # ── Attention ─────────────────────────────────────────────────────────────
     n_heads:           int   = 2
@@ -114,14 +98,6 @@ class PhotonicQLAConfig:
 
     # ── Feature grouping ──────────────────────────────────────────────────────
     n_fock_features:   int   = 20     # LexGrouping output dimension
-
-    @property
-    def varqite_n_params(self) -> int:
-        """Params in the VarQITE photonic ansatz: 2 PS per mode pair per layer."""
-        # For a GenericInterferometer with n_modes modes and varqite_layers layers
-        # Each MZI has 2 phase shifters; there are n_modes*(n_modes-1)/2 MZIs per layer
-        # Simplified: we use n_modes phase shifters per layer
-        return self.n_modes * self.varqite_layers
 
     @property
     def feature_dim(self) -> int:
@@ -300,170 +276,259 @@ class PhotonicFeatureExtractor:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 4. VarQITE-SVD MODULE (PHOTONIC VERSION)
-#    Same mathematical principle as qubit VarQITE, but:
-#    - Ansatz = trainable Perceval interferometer
-#    - Features = photonic output probabilities instead of ⟨Z_i⟩
-#    - QGT/C computed via finite-difference on photonic features
+# 4. AGP-KRYLOV COUNTERDIABATIC MODULE (PHOTONIC)
+#    Adiabatic Gauge Potential with Krylov subspace (Sels & Polkovnikov 2017,
+#    Claeys et al. 2019).  Operates entirely within the photonic circuit —
+#    no intermediate collapse to classical feature vectors.
+#    Encodes temporal dynamics (derivatives) into the unitary evolution.
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class PhotonicVarQITESVD:
+class PhotonicAGPKrylov:
     """
-    VarQITE-based SVD / PCA on photonic feature trajectories.
+    Adiabatic Gauge Potential with Krylov subspace — photonic circuit
+    implementation.
 
-    Instead of operating on statevectors directly (impossible for photonic
-    circuits with sampling), we operate on the feature vectors f(θ)
-    extracted from the photonic circuit outputs.
+    Given a data trajectory encoded as circuits {U(λ_t)}, computes
+    counterdiabatic (CD) corrections that encode temporal dynamics
+    directly into the unitary evolution.  The quantum state is NEVER
+    collapsed until the final measurement for attention features.
 
-    H = -Σ_t |f_t⟩⟨f_t|  (defined on classical feature space)
+    Physics (Sels & Polkovnikov 2017, Claeys et al. 2019)
+    ─────────────────────────────────────────────────────────
+    For a parameter-dependent Hamiltonian H(λ), the exact CD driving is:
+        H_CD = H(λ) + λ̇ · A_λ
+    where A_λ is the Adiabatic Gauge Potential satisfying:
+        [H, A_λ] = ∂_λH
 
-    The ansatz is a trainable photonic interferometer that transforms
-    the input state. Its parameters θ are evolved via McLachlan's principle
-    on the extracted feature vectors.
+    Variational Krylov ansatz:
+        A_λ ≈ Σ_{k=1}^{K} α_k O_k
+    where {O_k} are Krylov basis operators:
+        O_1 = ∂_λH,   O_k = i·[H, O_{k-1}]   (k ≥ 2)
+    Each O_k is Hermitianised and Gram-Schmidt orthogonalised.
 
-    This is mathematically equivalent to finding the dominant principal
-    component of the feature trajectory — a quantum-inspired PCA where
-    the features themselves come from a boson sampling reservoir.
+    The K coefficients α_k satisfy a K×K linear system:
+        M_{jk} α_k = b_j
+        M_{jk} = Tr([H, O_j]† [H, O_k])   (Gram matrix)
+        b_j    = Tr([H, O_j]† · ∂_λH)     (projection)
+
+    Photonic implementation
+    ─────────────────────────────────────────────────────────
+    • U_t = encoder + reservoir circuit at time t
+    • H_t = i·logm(U_t)  — effective Hamiltonian (m×m matrix)
+    • δH  = averaged temporal derivative of H
+    • Krylov basis built from matrix commutators (m modes → m×m)
+    • CD correction: U_CD(t) = U_t · exp(-i Σ_k α_k O_k)
+    • Corrected circuits carry temporal derivative information
+      in the unitary itself, accessible to the attention heads
+
+    Complexity:  T unitary extractions + O(K·m³) matrix ops + K×K solve.
     """
 
     def __init__(self, cfg: PhotonicQLAConfig):
         self.cfg = cfg
         self.n_modes = cfg.n_modes
-        self.n_photons = cfg.n_photons
-        self.P = cfg.varqite_n_params
-        self.s = cfg.varqite_shift
-        self.extractor = PhotonicFeatureExtractor(
-            cfg.n_modes, cfg.n_photons, cfg.n_fock_features
-        )
+        self.K = cfg.krylov_depth
 
-    def _build_ansatz(self, params: np.ndarray) -> pcvl.Circuit:
-        """
-        Build a trainable photonic ansatz circuit.
+    # ── helpers ────────────────────────────────────────────────────────────
 
-        Architecture: [PS(θ_i) on each mode + BS ladder] × n_layers
-        This is the photonic analog of the [RY RZ CNOT] qubit ansatz.
-        """
-        circ = pcvl.Circuit(self.n_modes)
+    def _get_unitary(self, circ: pcvl.Circuit) -> np.ndarray:
+        """Extract the m×m unitary matrix from a Perceval circuit."""
+        backend = pcvl.BackendFactory.get_backend("Naive")
+        backend.set_circuit(circ)
+        return np.array(backend.U)
 
-        # Initial beam splitter layer
-        for i in range(0, self.n_modes - 1, 2):
-            circ.add(i, pcvl.BS())
+    @staticmethod
+    def _hermitianise(M: np.ndarray) -> np.ndarray:
+        """Force Hermiticity: (M + M†)/2."""
+        return (M + M.conj().T) / 2.0
 
-        for layer in range(self.cfg.varqite_layers):
-            # Phase shifters (trainable)
-            for i in range(self.n_modes):
-                idx = layer * self.n_modes + i
-                circ.add(i, pcvl.PS(float(params[idx])))
+    # ── Krylov basis ──────────────────────────────────────────────────────
 
-            # Beam splitter entangling layer
-            start = layer % 2
-            for i in range(start, self.n_modes - 1, 2):
-                circ.add(i, pcvl.BS())
-
-        return circ
-
-    def _get_features(self, params: np.ndarray,
-                      base_circuit: pcvl.Circuit) -> np.ndarray:
-        """
-        Compose base circuit (encoder+reservoir) with ansatz(θ),
-        then extract feature vector.
-        """
-        ansatz = self._build_ansatz(params)
-        full_circuit = pcvl.Circuit(self.n_modes)
-        full_circuit.add(0, base_circuit)
-        full_circuit.add(0, ansatz)
-        return self.extractor.extract(full_circuit)
-
-    def _compute_A_C(
+    def _build_krylov_basis(
         self,
-        params: np.ndarray,
-        reservoir_features: List[np.ndarray],
-        base_circuit: pcvl.Circuit,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        H_ref: np.ndarray,
+        delta_H: np.ndarray,
+    ) -> List[np.ndarray]:
         """
-        Compute QGT matrix A and energy gradient C via finite-difference
-        on photonic feature vectors.
+        Build orthonormal Krylov basis {O_k} from nested commutators.
 
-        A_ij ≈ (∂f/∂θ_i)ᵀ (∂f/∂θ_j) - (∂f/∂θ_i·f)(f·∂f/∂θ_j)
-        C_i  = -Σ_t (∂f/∂θ_i)ᵀ f_t · (f_t·f)
+        O_1 = δH                        (Hermitian)
+        O_k = i·[H_ref, O_{k-1}]        (Hermitianised)
 
-        where f = f(θ) is the feature vector from the ansatz circuit.
+        Gram-Schmidt orthogonalisation keeps the basis well-conditioned.
+        Stops early if the Krylov space is exhausted (norm → 0).
         """
-        f = self._get_features(params, base_circuit)
+        basis: List[np.ndarray] = []
+        O = delta_H.copy()
 
-        # Compute all derivatives ∂f/∂θ_i via parameter-shift
-        d_f = np.zeros((self.P, len(f)))
-        for i in range(self.P):
-            p_plus = params.copy(); p_plus[i] += self.s
-            p_minus = params.copy(); p_minus[i] -= self.s
-            f_plus = self._get_features(p_plus, base_circuit)
-            f_minus = self._get_features(p_minus, base_circuit)
-            d_f[i] = (f_plus - f_minus) / (2.0 * np.sin(self.s))
+        for _ in range(self.K):
+            # Hermitianise
+            O = self._hermitianise(O)
 
-        # QGT: A_ij = (∂_if)·(∂_jf) - (∂_if·f)(f·∂_jf)
-        inner_dd = d_f @ d_f.T                          # (P, P)
-        inner_df = d_f @ f                               # (P,)
-        outer_term = np.outer(inner_df, inner_df)        # (P, P)
-        norm_sq = np.dot(f, f)
-        if norm_sq > 1e-12:
-            outer_term /= norm_sq
-        A = inner_dd - outer_term
+            # Gram-Schmidt against previous basis vectors
+            for prev in basis:
+                overlap = np.real(np.trace(prev.conj().T @ O))
+                O = O - overlap * prev
 
-        # Energy gradient: C_i = -Σ_t (∂_if · f_t)(f_t · f)
-        C = np.zeros(self.P)
-        for f_t in reservoir_features:
-            overlap = np.dot(f_t, f)
-            d_overlap = d_f @ f_t            # (P,) — ∂_i(f_t · f)
-            C -= d_overlap * overlap
+            norm = np.linalg.norm(O, 'fro')
+            if norm < 1e-12:
+                break   # Krylov space exhausted
+            O = O / norm
+            basis.append(O.copy())
 
-        return A, C
+            # Next Krylov vector: i·[H_ref, O_k]
+            comm = H_ref @ O - O @ H_ref      # anti-Hermitian
+            O = 1j * comm                       # → Hermitian
+
+        return basis
+
+    # ── AGP coefficient solver ────────────────────────────────────────────
+
+    def _solve_agp_coefficients(
+        self,
+        basis: List[np.ndarray],
+        H_ref: np.ndarray,
+        delta_H: np.ndarray,
+    ) -> np.ndarray:
+        """
+        Solve the K×K system for AGP coefficients α.
+
+        Minimises ‖[H, A_λ] − ∂_λH‖²  with  A_λ = Σ_k α_k O_k.
+
+        M_{jk} = Tr([H, O_j]† [H, O_k])     (Gram matrix)
+        b_j    = Tr([H, O_j]† · ∂_λH)       (projection)
+        """
+        K = len(basis)
+        if K == 0:
+            return np.zeros(self.K)
+
+        # Pre-compute commutators [H, O_k]
+        comms = [H_ref @ basis[k] - basis[k] @ H_ref for k in range(K)]
+
+        M = np.zeros((K, K))
+        b = np.zeros(K)
+
+        for j in range(K):
+            b[j] = np.real(np.trace(comms[j].conj().T @ delta_H))
+            for k in range(K):
+                M[j, k] = np.real(np.trace(comms[j].conj().T @ comms[k]))
+
+        # Tikhonov-regularised solve
+        M_reg = M + self.cfg.krylov_reg * np.eye(K)
+        try:
+            alphas = scipy_solve(M_reg, b)
+        except np.linalg.LinAlgError:
+            alphas = np.linalg.lstsq(M_reg, b, rcond=None)[0]
+
+        return alphas
+
+    # ── counterdiabatic circuit builder ───────────────────────────────────
+
+    def _build_cd_unitary(
+        self,
+        U_base: np.ndarray,
+        basis: List[np.ndarray],
+        alphas: np.ndarray,
+    ) -> np.ndarray:
+        """
+        Build counterdiabatic unitary:
+            U_CD = U_base · exp(-i Σ_k α_k O_k)
+
+        Matrix exponential is exact (not Trotterised) since m is small.
+        Polar decomposition cleans up numerical unitarity drift.
+        """
+        K = len(basis)
+        m = U_base.shape[0]
+        agp_generator = np.zeros((m, m), dtype=complex)
+        for k in range(min(K, len(alphas))):
+            agp_generator += alphas[k] * basis[k]
+
+        U_correction = expm(-1j * agp_generator)
+        U_cd = U_base @ U_correction
+
+        # Ensure unitarity (numerical cleanup)
+        U_cd, _ = polar(U_cd)
+
+        return U_cd
+
+    # ── main entry point ──────────────────────────────────────────────────
 
     def run(
         self,
-        reservoir_features: List[np.ndarray],
-        base_circuit: pcvl.Circuit,
-        init_params: Optional[np.ndarray] = None,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        base_circuits: List[pcvl.Circuit],
+    ) -> Tuple[List[pcvl.Circuit], np.ndarray]:
         """
-        Run VarQITE imaginary time evolution on photonic features.
+        Apply AGP-Krylov counterdiabatic correction to a circuit trajectory.
+
+        The correction operates entirely in Hilbert space — no intermediate
+        measurements.  Corrected unitaries carry temporal derivative
+        information from the data trajectory, making it accessible to
+        the photonic attention heads downstream.
+
+        Pipeline:
+            1. Extract T unitaries U_t from circuits  (T calls to Naive backend)
+            2. Compute effective Hamiltonians H_t = i·logm(U_t)
+            3. Average temporal derivative δH
+            4. Build Krylov basis {O_k} from [H, [H, ...δH...]]
+            5. Solve K×K system for AGP coefficients α
+            6. Build CD-corrected circuits U_CD(t) = U_t · exp(-i Σ α_k O_k)
 
         Args:
-            reservoir_features: T feature vectors from the reservoir
-            base_circuit: composed encoder+reservoir circuit
-            init_params: initial θ; if None → random
+            base_circuits: T Perceval circuits (encoder + reservoir per step)
 
         Returns:
-            params_final: converged ansatz parameters θ*
-            features: extracted feature vector at θ* (shape n_fock_features,)
+            compressed_circuits: T CD-corrected Perceval circuits
+            alphas: (K,) Krylov coefficients (diagnostic)
         """
-        cfg = self.cfg
-        rng = np.random.default_rng(
-            seed=int(abs(reservoir_features[0][0]) * 1e6) % (2**31)
-        )
-        params = (init_params.copy() if init_params is not None
-                  else rng.uniform(0, 2 * np.pi, self.P))
+        T = len(base_circuits)
+        m = self.n_modes
 
-        for step in range(cfg.varqite_steps):
-            A, C = self._compute_A_C(params, reservoir_features, base_circuit)
+        # 1. Extract unitaries from all circuits
+        Us = [self._get_unitary(c) for c in base_circuits]
 
-            # Tikhonov: solve (A + λI)δθ = C
-            A_reg = A + cfg.varqite_reg * np.eye(self.P)
-            try:
-                delta_theta = scipy_solve(A_reg, C, assume_a="pos")
-            except np.linalg.LinAlgError:
-                delta_theta = np.linalg.lstsq(A_reg, C, rcond=None)[0]
+        # 2. Effective Hamiltonians: H_t = i·logm(U_t)
+        Hs = []
+        for U in Us:
+            H_raw = 1j * logm(U)
+            Hs.append(self._hermitianise(H_raw))   # enforce Hermiticity
 
-            params = params + cfg.varqite_dtau * delta_theta
+        # 3. Reference Hamiltonian (centre of trajectory)
+        H_ref = Hs[T // 2]
 
-        # Extract final features
-        features = self._get_features(params, base_circuit)
-        return params, features
+        # 4. Average temporal derivative: δH = (1/(T-1)) Σ_t (H_{t+1} − H_t)
+        if T > 1:
+            delta_H = np.zeros_like(Hs[0])
+            for t in range(T - 1):
+                delta_H += Hs[t + 1] - Hs[t]
+            delta_H /= (T - 1)
+            delta_H = self._hermitianise(delta_H)
+        else:
+            delta_H = np.zeros_like(Hs[0])
+
+        # 5. Build Krylov basis
+        basis = self._build_krylov_basis(H_ref, delta_H)
+
+        if len(basis) == 0:
+            return base_circuits, np.zeros(self.K)
+
+        # 6. Solve K×K system for AGP coefficients
+        alphas = self._solve_agp_coefficients(basis, H_ref, delta_H)
+
+        # 7. Build counterdiabatic circuits
+        compressed: List[pcvl.Circuit] = []
+        for t in range(T):
+            U_cd = self._build_cd_unitary(Us[t], basis, alphas)
+            circ = pcvl.Circuit(m)
+            circ.add(0, pcvl.Unitary(pcvl.Matrix(U_cd)))
+            compressed.append(circ)
+
+        return compressed, alphas
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 5. PHOTONIC ATTENTION (Q, K, V INTERFEROMETERS)
-#    Each head applies trainable interferometers to the VarQITE-compressed
-#    features. Output: mode-occupation features used for attention scores.
+#    Each head applies trainable interferometers to the AGP-compressed
+#    circuits. Output: mode-occupation features used for attention scores.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class PhotonicAttentionHead:
@@ -471,7 +536,7 @@ class PhotonicAttentionHead:
     One photonic attention head.
 
     Q, K, V each have a separate trainable interferometer.
-    Applied to the VarQITE-compressed features, producing
+    Applied to the AGP-compressed circuits, producing
     new feature vectors for attention computation.
 
     In photonic terms:
@@ -536,7 +601,7 @@ class PhotonicAttentionHead:
 
 class PhotonicAttentionLayer:
     """
-    Multi-head photonic attention over VarQITE-compressed circuits.
+    Multi-head photonic attention over AGP-compressed circuits.
 
     For each head h and each token t with compressed circuit c_t:
         Q_t^h = U_Q^h(c_t) → features
@@ -563,7 +628,7 @@ class PhotonicAttentionLayer:
     def forward(self, compressed_circuits: List[pcvl.Circuit]) -> np.ndarray:
         """
         Args:
-            compressed_circuits: T circuits (encoder+reservoir+VarQITE ansatz)
+            compressed_circuits: T circuits (encoder+reservoir+AGP correction)
         Returns:
             (T, feature_dim) attention output
         """
@@ -607,7 +672,7 @@ class MerLinAttentionHead(nn.Module):
     Attention head using MerLin's QuantumLayer for differentiable photonic Q/K/V.
 
     Uses CircuitBuilder to create trainable interferometers that project
-    VarQITE-compressed features into Q, K, V subspaces.
+    AGP-compressed features into Q, K, V subspaces.
     """
 
     def __init__(self, n_modes: int, n_photons: int,
@@ -647,7 +712,7 @@ class MerLinAttentionHead(nn.Module):
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Args:
-            x: (T, input_dim) features from VarQITE
+            x: (T, input_dim) features from AGP compression
         Returns:
             Q, K, V: each (T, output_dim)
         """
@@ -701,15 +766,16 @@ class MerLinAttentionLayer(nn.Module):
 
 class PhotonicQLATransformer(nn.Module):
     """
-    Full Photonic Quantum Linear Algebra Transformer.
+    Photonic Transformer with AGP-Krylov counterdiabatic compression
+    and Boson Sampling reservoir.
 
     Forward pass:
         1. Encode each time step's features via PhotonicEncoder
         2. Pass through BosonSamplingReservoir (fixed)
-           → per-timestep photonic circuits + Fock probability features
-        3. Run VarQITE-SVD on feature trajectory
-           → compressed feature vectors (dominant subspace)
-        4. Multi-head photonic attention on compressed features
+           → per-timestep photonic circuits
+        3. AGP-Krylov counterdiabatic correction on the circuit
+           trajectory (operates in Hilbert space, no collapse)
+        4. Multi-head photonic attention on corrected circuits
         5. Classical readout → prediction ŷ_{t+h}
     """
 
@@ -720,7 +786,7 @@ class PhotonicQLATransformer(nn.Module):
         self.reservoir = BosonSamplingReservoir(
             cfg.n_modes, cfg.n_res_layers, cfg.reservoir_seed
         )
-        self.varqite = PhotonicVarQITESVD(cfg)
+        self.agp = PhotonicAGPKrylov(cfg)
         self.feature_extractor = PhotonicFeatureExtractor(
             cfg.n_modes, cfg.n_photons, cfg.n_fock_features
         )
@@ -737,9 +803,6 @@ class PhotonicQLATransformer(nn.Module):
             nn.Linear(feat * 2, cfg.horizon),
         )
 
-        # Cache for VarQITE warm-start
-        self._varqite_cache: Optional[np.ndarray] = None
-
     def _build_reservoir_circuit(self, x: np.ndarray) -> pcvl.Circuit:
         """Encode features + pass through reservoir → composed circuit."""
         enc = self.encoder.build_encoding_circuit(x)
@@ -749,58 +812,30 @@ class PhotonicQLATransformer(nn.Module):
         full.add(0, res)
         return full
 
-    def _reservoir_features(self, sequence: np.ndarray) -> Tuple[
-        List[pcvl.Circuit], List[np.ndarray]
-    ]:
-        """
-        Encode + reservoir → list of (circuit, feature_vector) per time step.
-        """
+    def _build_reservoir_circuits(self, sequence: np.ndarray) -> List[pcvl.Circuit]:
+        """Encode + reservoir → list of circuits per time step."""
         circuits = []
-        features = []
         for t in range(len(sequence)):
             circ = self._build_reservoir_circuit(sequence[t])
-            feat = self.feature_extractor.extract(circ)
             circuits.append(circ)
-            features.append(feat)
-        return circuits, features
+        return circuits
 
-    def _varqite_compress(
+    def _agp_compress(
         self,
         circuits: List[pcvl.Circuit],
-        features: List[np.ndarray],
     ) -> Tuple[List[pcvl.Circuit], np.ndarray]:
         """
-        Run VarQITE on causal windows of reservoir features.
+        Apply AGP-Krylov counterdiabatic correction to reservoir circuits.
 
-        For token t: context = features[0:t+1] (causal).
-        Uses the last circuit as base for ansatz composition.
+        The correction operates entirely in Hilbert space:
+        H_t = i·logm(U_t), δH averaged, Krylov basis built, K×K solve,
+        then U_CD(t) = U_t · exp(-i Σ α_k O_k).
 
         Returns:
-            compressed_circuits: T circuits with VarQITE ansatz appended
-            final_params: last token's converged params (warm start)
+            compressed_circuits: T CD-corrected Perceval circuits
+            alphas: (K,) Krylov coefficients
         """
-        compressed = []
-        init_p = self._varqite_cache
-
-        for t in range(len(circuits)):
-            context_features = features[:t + 1]
-            base_circuit = circuits[t]
-
-            params, _ = self.varqite.run(
-                context_features, base_circuit, init_params=init_p
-            )
-
-            # Build compressed circuit = base + VarQITE ansatz
-            ansatz = self.varqite._build_ansatz(params)
-            comp_circ = pcvl.Circuit(self.cfg.n_modes)
-            comp_circ.add(0, base_circuit)
-            comp_circ.add(0, ansatz)
-            compressed.append(comp_circ)
-
-            init_p = params
-
-        self._varqite_cache = init_p
-        return compressed, init_p
+        return self.agp.run(circuits)
 
     def forward_np(self, sequence: np.ndarray) -> torch.Tensor:
         """
@@ -812,11 +847,11 @@ class PhotonicQLATransformer(nn.Module):
         Returns:
             prediction: (horizon,) tensor
         """
-        # 1. Reservoir
-        circuits, features = self._reservoir_features(sequence)
+        # 1. Reservoir circuits
+        circuits = self._build_reservoir_circuits(sequence)
 
-        # 2. VarQITE-SVD compression
-        comp_circuits, _ = self._varqite_compress(circuits, features)
+        # 2. AGP-Krylov counterdiabatic compression
+        comp_circuits, _ = self._agp_compress(circuits)
 
         # 3. Photonic attention
         attn_out = self.attention.forward(comp_circuits)
@@ -840,12 +875,12 @@ class MerLinHybridModel(nn.Module):
     """
     Hybrid model using:
     - Perceval BosonSamplingReservoir for feature extraction
-    - Classical VarQITE-SVD for compression
+    - AGP-Krylov counterdiabatic correction (operates in Hilbert space)
     - MerLin QuantumLayer for differentiable attention
     - PyTorch readout
 
-    This combines the best of both: photonic reservoir richness
-    with MerLin's autograd-compatible quantum layers for training.
+    This combines: photonic reservoir richness, AGP-encoded temporal
+    dynamics, and MerLin's autograd-compatible quantum layers for training.
     """
 
     def __init__(self, cfg: PhotonicQLAConfig):
@@ -858,7 +893,7 @@ class MerLinHybridModel(nn.Module):
         self.feature_extractor = PhotonicFeatureExtractor(
             cfg.n_modes, cfg.n_photons, cfg.n_fock_features
         )
-        self.varqite = PhotonicVarQITESVD(cfg)
+        self.agp = PhotonicAGPKrylov(cfg)
 
         # MerLin attention (differentiable)
         if HAS_MERLIN:
@@ -876,18 +911,19 @@ class MerLinHybridModel(nn.Module):
             nn.Linear(feat * 2, cfg.horizon),
         )
 
-        self._varqite_cache = None
-
     def _extract_features(self, sequence: np.ndarray) -> np.ndarray:
         """
         Full quantum feature extraction pipeline:
-        encode → reservoir → VarQITE compression → feature vectors.
+        encode → reservoir → AGP-Krylov correction → feature extraction.
+
+        Unlike VarQITE (which collapsed to classical features THEN compressed),
+        AGP operates on the unitaries in Hilbert space BEFORE extracting
+        features — so the extracted features carry temporal derivative info.
 
         Returns:
             (T, n_fock_features) numpy array
         """
-        # Reservoir features
-        all_features = []
+        # 1. Build reservoir circuits
         all_circuits = []
         for t in range(len(sequence)):
             enc = self.encoder.build_encoding_circuit(sequence[t])
@@ -895,24 +931,18 @@ class MerLinHybridModel(nn.Module):
             circ = pcvl.Circuit(self.cfg.n_modes)
             circ.add(0, enc)
             circ.add(0, res)
-            feat = self.feature_extractor.extract(circ)
-            all_features.append(feat)
             all_circuits.append(circ)
 
-        # VarQITE compression (causal)
-        compressed_features = []
-        init_p = self._varqite_cache
+        # 2. AGP-Krylov correction (in Hilbert space)
+        corrected_circuits, _ = self.agp.run(all_circuits)
 
-        for t in range(len(sequence)):
-            context = all_features[:t + 1]
-            params, comp_feat = self.varqite.run(
-                context, all_circuits[t], init_params=init_p
-            )
-            compressed_features.append(comp_feat)
-            init_p = params
+        # 3. Extract features from corrected circuits
+        features = []
+        for circ in corrected_circuits:
+            feat = self.feature_extractor.extract(circ)
+            features.append(feat)
 
-        self._varqite_cache = init_p
-        return np.array(compressed_features)
+        return np.array(features)
 
     def forward(self, sequence: np.ndarray) -> torch.Tensor:
         """
@@ -1150,8 +1180,8 @@ def plot_results(
         ("Boson Sampling Reservoir [FIXED]",     0.56),
         ("random PS + BS interferometer",        0.50),
         ("↓",                                    0.43),
-        ("VarQITE-SVD (on Fock features)",       0.36),
-        ("H=-Σ|f_t⟩⟨f_t| · QGT · McLachlan",   0.30),
+        ("AGP-Krylov CD correction",              0.36),
+        ("[H,A]=δH · Krylov basis · K×K solve",  0.30),
         ("↓",                                    0.23),
         ("Photonic Attention (Q,K,V heads)",     0.16),
         ("↓",                                    0.10),
@@ -1171,7 +1201,7 @@ def plot_results(
 
     arch = (f"modes={cfg.n_modes}  |  photons={cfg.n_photons}  |  "
             f"res_layers={cfg.n_res_layers}  |  heads={cfg.n_heads}")
-    fig.suptitle(f"Photonic QLA-Transformer + Boson Sampling\n{arch}",
+    fig.suptitle(f"Photonic AGP-Krylov Transformer + Boson Sampling\n{arch}",
                  color="white", fontsize=11, y=1.01)
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches="tight",
@@ -1186,8 +1216,8 @@ def plot_results(
 
 def main(train_path: str = "train.xlsx"):
     print("╔══════════════════════════════════════════════════════════════════╗")
-    print("║  Photonic QLA-Transformer + Boson Sampling Reservoir            ║")
-    print("║  VarQITE-SVD · QGT · McLachlan · Perceval · MerLin             ║")
+    print("║  Photonic AGP-Krylov Transformer + Boson Sampling Reservoir     ║")
+    print("║  Counterdiabatic · Krylov · Perceval · MerLin                   ║")
     print("║  Swaption Pricing — Quandela EPFL Hackathon 2026               ║")
     print("╚══════════════════════════════════════════════════════════════════╝\n")
 
@@ -1195,10 +1225,8 @@ def main(train_path: str = "train.xlsx"):
         n_modes         = 8,
         n_photons       = 4,
         n_res_layers    = 3,
-        varqite_layers  = 2,
-        varqite_steps   = 8,
-        varqite_dtau    = 0.08,
-        varqite_reg     = 1e-3,
+        krylov_depth    = 3,
+        krylov_reg      = 1e-4,
         n_heads         = 2,
         n_attn_layers   = 2,
         seq_len         = 10,
@@ -1223,16 +1251,14 @@ def main(train_path: str = "train.xlsx"):
     print("[2/4] Building photonic model…")
     model = PhotonicQLATransformer(cfg)
 
-    n_varqite = cfg.varqite_n_params
     n_attn = len(model.attention.get_all_params())
     n_readout = sum(p.numel() for p in model.readout.parameters())
     print(f"      Photonic modes             : {cfg.n_modes}")
     print(f"      Photons                    : {cfg.n_photons}")
     print(f"      Reservoir layers           : {cfg.n_res_layers} (fixed, seed={cfg.reservoir_seed})")
-    print(f"      VarQITE ansatz params      : {n_varqite}  (re-optimised each fwd)")
+    print(f"      AGP Krylov depth           : {cfg.krylov_depth}  (K×K system)")
     print(f"      Attention Q,K,V params     : {n_attn}  (param-shift trained)")
     print(f"      Readout params             : {n_readout}  (Adam trained)")
-    print(f"      VarQITE steps per token    : {cfg.varqite_steps}")
     print(f"      Fock feature dim           : {cfg.n_fock_features}")
     print(f"      Feature dim after attention: {cfg.feature_dim}")
     print(f"      MerLin available           : {HAS_MERLIN}\n")
