@@ -635,46 +635,53 @@ h3{font-family:'Instrument Serif',serif;font-size:1.25rem;font-weight:400}
 <section class="slide" id="s16">
   <div class="slide-inner">
     <div class="slide-num">10 — Next Steps</div>
-    <h2><span style="color:var(--purple)">Photonic QLA-Transformer</span> <span style="font-size:0.5em;color:var(--t3)">(Future Work)</span></h2>
-    <p class="sub">Multi-stage quantum attention architecture — not yet executed due to computational constraints. Planned as a next step.</p>
+    <h2><span style="color:var(--purple)">Photonic AGP-Krylov Transformer</span> <span style="font-size:0.5em;color:var(--t3)">(Future Work)</span></h2>
+    <p class="sub">Counterdiabatic-driven photonic transformer — encodes temporal dynamics <em>inside</em> the unitary evolution via Adiabatic Gauge Potential (Sels &amp; Polkovnikov 2017).</p>
     <div class="arch-diagram" style="padding:1.2rem">
-      <svg viewBox="0 0 1000 160" xmlns="http://www.w3.org/2000/svg">
-        <rect x="10" y="50" width="80" height="60" rx="6" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
-        <text x="50" y="75" text-anchor="middle" fill="#e8ecf4" font-family="Space Mono,monospace" font-size="10">PCA</text>
-        <text x="50" y="92" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="8">5d</text>
-        <path d="M 95 80 L 125 80" stroke="#ce93d8" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
-        <rect x="130" y="50" width="80" height="60" rx="6" fill="rgba(0,229,255,0.05)" stroke="var(--cyan)" stroke-width="1.5"/>
-        <text x="170" y="75" text-anchor="middle" fill="var(--cyan)" font-family="Space Mono,monospace" font-size="9">Encoder</text>
-        <text x="170" y="92" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="8">embed</text>
-        <path d="M 215 80 L 245 80" stroke="#ce93d8" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
-        <rect x="250" y="45" width="120" height="70" rx="6" fill="rgba(105,240,174,0.05)" stroke="var(--green)" stroke-width="1.5"/>
-        <text x="310" y="70" text-anchor="middle" fill="var(--green)" font-family="Space Mono,monospace" font-size="9">Boson</text>
-        <text x="310" y="84" text-anchor="middle" fill="var(--green)" font-family="Space Mono,monospace" font-size="9">Reservoir</text>
-        <text x="310" y="100" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">8m,4ph</text>
+      <svg viewBox="0 0 1060 160" xmlns="http://www.w3.org/2000/svg">
+        <!-- PCA -->
+        <rect x="10" y="50" width="70" height="60" rx="6" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+        <text x="45" y="75" text-anchor="middle" fill="#e8ecf4" font-family="Space Mono,monospace" font-size="10">PCA</text>
+        <text x="45" y="92" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="8">5d → [0,1]</text>
+        <path d="M 85 80 L 110 80" stroke="#ce93d8" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
+        <!-- Photonic Encoder -->
+        <rect x="115" y="45" width="100" height="70" rx="6" fill="rgba(0,229,255,0.05)" stroke="var(--cyan)" stroke-width="1.5"/>
+        <text x="165" y="68" text-anchor="middle" fill="var(--cyan)" font-family="Space Mono,monospace" font-size="9">Photonic</text>
+        <text x="165" y="82" text-anchor="middle" fill="var(--cyan)" font-family="Space Mono,monospace" font-size="9">Encoder</text>
+        <text x="165" y="100" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">BS + PS(x·π)</text>
+        <path d="M 220 80 L 245 80" stroke="#ce93d8" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
+        <!-- Boson Reservoir -->
+        <rect x="250" y="40" width="120" height="80" rx="6" fill="rgba(105,240,174,0.05)" stroke="var(--green)" stroke-width="1.5"/>
+        <text x="310" y="63" text-anchor="middle" fill="var(--green)" font-family="Space Mono,monospace" font-size="9">Boson</text>
+        <text x="310" y="77" text-anchor="middle" fill="var(--green)" font-family="Space Mono,monospace" font-size="9">Reservoir</text>
+        <text x="310" y="95" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">FIXED · 8m, 4ph</text>
+        <text x="310" y="108" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">#P-hard features</text>
         <path d="M 375 80 L 405 80" stroke="#ce93d8" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
-        <rect x="410" y="50" width="80" height="60" rx="6" fill="rgba(255,213,79,0.05)" stroke="var(--gold)" stroke-width="1.5"/>
-        <text x="450" y="75" text-anchor="middle" fill="var(--gold)" font-family="Space Mono,monospace" font-size="9">Fock</text>
-        <text x="450" y="92" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="8">20d</text>
-        <path d="M 495 80 L 525 80" stroke="#ce93d8" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
-        <rect x="530" y="45" width="130" height="70" rx="6" fill="rgba(206,147,216,0.08)" stroke="var(--purple)" stroke-width="1.5"/>
-        <text x="595" y="68" text-anchor="middle" fill="var(--purple)" font-family="Space Mono,monospace" font-size="9">VarQITE</text>
-        <text x="595" y="82" text-anchor="middle" fill="var(--purple)" font-family="Space Mono,monospace" font-size="9">SVD</text>
-        <text x="595" y="100" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">compress</text>
-        <path d="M 665 80 L 695 80" stroke="#ce93d8" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
-        <rect x="700" y="40" width="140" height="80" rx="6" fill="rgba(255,112,67,0.05)" stroke="var(--orange)" stroke-width="1.5"/>
-        <text x="770" y="65" text-anchor="middle" fill="var(--orange)" font-family="Space Mono,monospace" font-size="9">Photonic</text>
-        <text x="770" y="79" text-anchor="middle" fill="var(--orange)" font-family="Space Mono,monospace" font-size="9">Attention</text>
-        <text x="770" y="95" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">2 heads Q,K,V</text>
-        <text x="770" y="107" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">trainable</text>
-        <path d="M 845 80 L 875 80" stroke="#ce93d8" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
-        <rect x="880" y="50" width="80" height="60" rx="6" fill="rgba(105,240,174,0.05)" stroke="var(--green)" stroke-width="1.5"/>
-        <text x="920" y="75" text-anchor="middle" fill="var(--green)" font-family="Space Mono,monospace" font-size="9">MLP</text>
-        <text x="920" y="92" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="8">output</text>
+        <!-- AGP-Krylov -->
+        <rect x="410" y="35" width="160" height="90" rx="6" fill="rgba(206,147,216,0.08)" stroke="var(--purple)" stroke-width="1.5"/>
+        <text x="490" y="57" text-anchor="middle" fill="var(--purple)" font-family="Space Mono,monospace" font-size="9" font-weight="700">AGP-Krylov</text>
+        <text x="490" y="72" text-anchor="middle" fill="var(--purple)" font-family="Space Mono,monospace" font-size="8">Counterdiabatic</text>
+        <text x="490" y="88" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">H=i·logm(U), δH</text>
+        <text x="490" y="101" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">Krylov K=3, K×K</text>
+        <text x="490" y="114" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">U_CD = U·exp(-iΣα·O)</text>
+        <path d="M 575 80 L 605 80" stroke="#ce93d8" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
+        <!-- Photonic Attention -->
+        <rect x="610" y="40" width="150" height="80" rx="6" fill="rgba(255,112,67,0.05)" stroke="var(--orange)" stroke-width="1.5"/>
+        <text x="685" y="62" text-anchor="middle" fill="var(--orange)" font-family="Space Mono,monospace" font-size="9">Photonic</text>
+        <text x="685" y="76" text-anchor="middle" fill="var(--orange)" font-family="Space Mono,monospace" font-size="9">Attention</text>
+        <text x="685" y="92" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">2 heads · Q,K,V</text>
+        <text x="685" y="105" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="7">param-shift grad</text>
+        <path d="M 765 80 L 795 80" stroke="#ce93d8" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
+        <!-- MLP Readout -->
+        <rect x="800" y="50" width="90" height="60" rx="6" fill="rgba(105,240,174,0.05)" stroke="var(--green)" stroke-width="1.5"/>
+        <text x="845" y="75" text-anchor="middle" fill="var(--green)" font-family="Space Mono,monospace" font-size="9">MLP</text>
+        <text x="845" y="92" text-anchor="middle" fill="#8895a7" font-family="Space Mono,monospace" font-size="8">ŷ_{t+h}</text>
       </svg>
     </div>
     <div style="margin-top:1rem">
-      <span class="tag tag-cyan">Boson Sampling</span>
-      <span class="tag tag-purple">VarQITE-SVD</span>
+      <span class="tag tag-cyan">Photonic Encoding</span>
+      <span class="tag tag-green">Boson Sampling</span>
+      <span class="tag tag-purple">AGP-Krylov CD</span>
       <span class="tag tag-orange">Photonic Attention</span>
     </div>
   </div>
@@ -684,31 +691,36 @@ h3{font-family:'Instrument Serif',serif;font-size:1.25rem;font-weight:400}
 <section class="slide" id="s17">
   <div class="slide-inner">
     <div class="slide-num">10 — Next Steps (Details)</div>
-    <h2><span style="color:var(--purple)">QLA-Transformer:</span> Proposed Architecture</h2>
+    <h2><span style="color:var(--purple)">AGP-Krylov Transformer:</span> How It Works</h2>
     <div class="g2">
       <div>
         <div class="card" style="border-color:rgba(206,147,216,0.25)">
-          <h3 style="color:var(--purple)">VarQITE-SVD Core</h3>
-          <p>McLachlan variational imaginary-time evolution on reservoir features:<br><br>
-          $H = -\sum |f_i\rangle\langle f_i|$<br><br>
-          Finds dominant principal component via QGT-guided evolution. 8 steps, $\Delta\tau=0.08$</p>
+          <h3 style="color:var(--purple)">AGP-Krylov Counterdiabatic Core</h3>
+          <p>Adiabatic Gauge Potential (Sels &amp; Polkovnikov 2017):<br><br>
+          $[H, A_\lambda] = \partial_\lambda H$<br><br>
+          Variational Krylov ansatz: $A_\lambda \approx \sum_k \alpha_k O_k$<br>
+          $O_1 = \delta H$, &ensp; $O_k = i[H, O_{k-1}]$ &ensp; (Hermitianised)<br><br>
+          Solve a tiny $K{\times}K$ system ($K{=}3$) — microseconds.<br>
+          <strong>Key:</strong> operates entirely in Hilbert space — encodes $dx/dt$, $d^2x/dt^2$ into the unitary itself.</p>
         </div>
         <div class="card" style="margin-top:1rem">
-          <h3>Boson Sampling Reservoir</h3>
-          <p>8 modes, 4 photons · Fixed random interferometer<br>
-          Fock measurement → 20-dim features<br>
-          Computational hardness guarantee</p>
+          <h3 style="color:var(--green)">Boson Sampling Reservoir</h3>
+          <p>8 modes, 4 photons · Fixed random interferometer (never trained)<br>
+          Output: Fock-state probability distribution (exponentially rich, #P-hard)<br>
+          Photonic analog of qubit QRC — no barren plateaus</p>
         </div>
       </div>
       <div>
         <div class="card" style="border-color:rgba(255,112,67,0.2)">
-          <h3 style="color:var(--orange)">Photonic Attention</h3>
-          <p>2 attention heads<br>
-          3 trainable interferometers per head (Q, K, V)<br>
+          <h3 style="color:var(--orange)">Photonic Attention + Hybrid Training</h3>
+          <p>2 attention heads · Q, K, V as <strong>trainable interferometers</strong> (PS + BS)<br>
           Causal-masked scaled dot-product attention<br>
-          Optional MerLin QuantumLayer for autograd</p>
+          MerLin QuantumLayer option for PyTorch autograd<br><br>
+          <strong>Hybrid training:</strong><br>
+          &bull; Readout MLP → Adam (classical backprop)<br>
+          &bull; Quantum attention → parameter-shift rule: $\nabla_j L \approx \frac{L(\theta_j{+}s) - L(\theta_j{-}s)}{2\sin(s)}$</p>
         </div>
-        <div class="insight purple" style="margin-top:0.6rem"><strong>Future work:</strong> This 6-stage pipeline combining multiple quantum techniques was designed but could not be fully trained and evaluated due to computational resource constraints. It remains a promising direction for future investigation.</div>
+        <div class="insight purple" style="margin-top:0.6rem"><strong>Why AGP-Krylov?</strong> Unlike VarQITE (which collapses to classical features <em>then</em> compresses), AGP operates on the unitaries in Hilbert space <em>before</em> measurement — so extracted features carry temporal derivative information. This is a promising direction for future investigation.</div>
       </div>
     </div>
   </div>
