@@ -1,0 +1,653 @@
+\documentclass[11pt,a4paper]{article}
+
+% ------------------------------------------------------------------
+% Packages
+% ------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{setspace}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}   % <-- FIX: enable row colors in tables
+\usepackage{colortbl}        % <-- FIX: extra robustness for colored tables
+\usepackage{caption}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+% ------------------------------------------------------------------
+% Formatting
+% ------------------------------------------------------------------
+\setstretch{1.15}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.15} % nicer tables
+
+\definecolor{TitleBlue}{RGB}{18,52,86}
+\definecolor{SoftGray}{RGB}{88,88,88}
+\definecolor{TableGray}{RGB}{245,247,250}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=TitleBlue,
+    urlcolor=TitleBlue,
+    citecolor=TitleBlue,
+    pdftitle={Models and Results Report - EPFL Quantum Hackathon},
+    pdfauthor={INVIQTVS Team}
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{SoftGray}{EPFL Quantum Hackathon}}
+\fancyhead[R]{\textcolor{SoftGray}{Models and Results}}
+\fancyfoot[C]{\thepage}
+
+\titleformat{\section}
+  {\Large\bfseries\color{TitleBlue}}
+  {\thesection.}{0.6em}{}
+\titleformat{\subsection}
+  {\large\bfseries\color{TitleBlue}}
+  {\thesubsection.}{0.6em}{}
+\titleformat{\subsubsection}
+  {\normalsize\bfseries\color{TitleBlue}}
+  {\thesubsubsection.}{0.6em}{}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\best}[1]{\textbf{#1}}
+
+% ------------------------------------------------------------------
+% Consistent notation helpers (prevents weird subscripts in PDF extraction)
+% ------------------------------------------------------------------
+\newcommand{\Surface}{\ensuremath{\text{Surface}_{224}}}
+\newcommand{\hSurface}{\ensuremath{\widehat{\text{Surface}}_{224}}}
+\newcommand{\Rtwo}{\ensuremath{\mathrm{R}^2}}
+
+% ------------------------------------------------------------------
+% Title
+% ------------------------------------------------------------------
+\title{\vspace{-1.2cm}\textbf{Technical Report on Models and Results}\\[0.4em]
+\large Swaptions Challenge -- EPFL Quantum Hackathon}
+\author{INVIQTVS Team}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\vspace{-1.0em}
+
+\begin{abstract}
+This document presents a technical description, focused exclusively on models and results, of the repository developed for the EPFL Quantum Hackathon swaption surface forecasting challenge. The analysis covers the classical model family and the quantum and hybrid model family available in the project, with particular attention to the pipeline that has actually been executed and evaluated. The main finding is twofold: first, the problem exhibits high persistence and low effective dimensionality, which makes linear baselines and simple persistence extraordinarily competitive; second, quantum and hybrid models can improve over the original notebook baseline, but the improvement over the strongest classical method is modest and requires very careful calibration. The best stable model currently available on the main branch is a hybrid \textit{quantum-inspired reservoir + LSTM}, while the best result observed in internal research was obtained with a more refined hybrid variant based on a bosonic reservoir and a \texttt{GRU}. Throughout the report, the mathematical structure of each family is explained, along with its strengths and limitations, and a homogeneous quantitative comparison of the available results is presented.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ------------------------------------------------------------------
+\section{Problem formulation from a modeling perspective}
+
+The problem addressed in the repository is a multivariate time-series forecasting problem over a swaption price surface. At each date, a surface composed of 224 numerical values is observed. From the machine learning perspective, each observation can be interpreted as a 224-dimensional vector, while from the financial perspective it has a surface geometry combining different maturity and tenor axes.
+
+The entire modeling strategy in the repository revolves around a common idea: the observed surface is high-dimensional, but its effective dynamics are low-dimensional. For that reason, nearly all model families first apply a compression stage or a feature-construction stage, and only then learn the temporal evolution. This idea appears in both the classical and the quantum parts:
+
+\begin{enumerate}[label=\arabic*.]
+    \item The surface is reduced or re-expressed in a more compact latent space.
+    \item A temporal representation is built through sliding windows.
+    \item A transition law or a next-step correction is learned.
+    \item The original surface is reconstructed in order to evaluate the true problem error.
+\end{enumerate}
+
+The practical consequence of this formulation is that the project does not simply compare networks against regressions, but rather different ways of constructing a good latent space and a good transition operator. That is the true technical axis of the repository.
+
+% ------------------------------------------------------------------
+\section{General modeling pipeline}
+
+Although the repository contains several model families, the dominant conceptual pipeline is the following:
+
+\[
+\Surface \;\rightarrow\; \text{Scaling} \;\rightarrow\; \text{Compression / Feature Map} \;\rightarrow\; \text{Temporal Model} \;\rightarrow\; \hSurface
+\]
+
+More specifically, in its most recurrent form:
+
+\begin{enumerate}[label=\arabic*.]
+    \item The 224 surface columns are extracted.
+    \item They are normalized with \texttt{StandardScaler}.
+    \item They are projected into a latent space (typically PCA).
+    \item Fixed-length temporal windows are built.
+    \item The model predicts the next state or the next-state delta.
+    \item The surface is reconstructed through the inverse latent transformation.
+    \item Error is evaluated both in factor space and in the final reconstructed surface.
+\end{enumerate}
+
+The two metrics that structure the whole comparison are:
+
+\begin{itemize}
+    \item \textbf{Factor MSE}: mean squared error in the compressed latent space.
+    \item \textbf{Surface MSE}: mean squared error after reconstructing the full 224-dimensional surface.
+\end{itemize}
+
+\textit{Surface MSE} is the main metric, since it best reflects the actual objective of the challenge.
+
+% ------------------------------------------------------------------
+\section{Classical models}
+
+\subsection{Original linear baseline: PCA + Ridge}
+
+The original classical baseline comes from the main notebook and serves as the reference point upon which much of the later comparison is built. Its architecture is:
+
+\[
+\text{Surface} \rightarrow \text{StandardScaler} \rightarrow \text{PCA}(k=12) \rightarrow \text{Windows}(W=20) \rightarrow \text{Ridge}
+\]
+
+This model takes the time series of surfaces, compresses it with PCA into 12 factors, builds 20-step windows, and learns a linear prediction of the next latent state.
+
+\subsubsection{Motivation}
+The motivation for the model is reasonable:
+
+\begin{itemize}
+    \item The surface exhibits high redundancy and low effective dimensionality.
+    \item PCA extracts the main latent factors, stabilizing the regression.
+    \item \texttt{Ridge} regularization prevents overfitting in a problem with relatively few observations.
+\end{itemize}
+
+\subsubsection{Strengths}
+This model has several strengths:
+
+\begin{itemize}
+    \item It is simple and interpretable.
+    \item It trains very quickly.
+    \item It is robust and reproducible.
+    \item It works well when the latent dynamics are nearly linear or of very low complexity.
+\end{itemize}
+
+\subsubsection{Limitations}
+Its main limitation is that it is formulated as a direct prediction of the next latent level, instead of explicitly modeling the incremental change. In a highly persistent dataset, this difference matters.
+
+\subsubsection{Observed result}
+In the evaluations performed, the original baseline obtained:
+
+\begin{itemize}
+    \item \textbf{Factor MSE}: 0.7360304829
+    \item \textbf{Surface MSE}: 0.0000144493
+\end{itemize}
+
+This point serves as the main reference for measuring relative improvements.
+
+% ------------------------------------------------------------------
+\subsection{Classical Ridge reproduced as a model class}
+
+In addition to the notebook, the repository contains a modular implementation in \texttt{src/models/classical/ridge.py}. This class conceptually replicates the baseline above and allows it to be integrated more cleanly with the rest of the pipeline.
+
+The importance of this implementation is not so much to improve the result, but to move the baseline into a reusable form consistent with a cleaner repository design.
+
+In comparable tests, this implementation reproduces essentially the same metric as the notebook:
+
+\begin{itemize}
+    \item \textbf{Surface MSE}: 0.0000144493
+    \item \textbf{Surface $\Rtwo$}: 0.9984077399
+\end{itemize}
+
+This confirms that migrating from notebook to module does not degrade the result.
+
+% ------------------------------------------------------------------
+\subsection{Classical LSTM}
+
+The classical family also includes a pure \texttt{LSTM} implementation in \texttt{src/models/classical/lstm.py}. Conceptually, this line aims to replace the linear predictor with a recurrent network capable of learning richer temporal dependencies.
+
+\subsubsection{Motivation}
+The motivation for the classical \texttt{LSTM} is standard in time-series modeling:
+
+\begin{itemize}
+    \item Capture nonlinear dependencies.
+    \item Exploit long-term memory.
+    \item Replace the implicit linear dynamics of \texttt{Ridge} with a more flexible transition law.
+\end{itemize}
+
+\subsubsection{Observed issue}
+In this project, however, the classical \texttt{LSTM} does not compete well. The reason is structural:
+
+\begin{itemize}
+    \item The dataset contains only a few hundred temporal observations.
+    \item The series is extremely persistent.
+    \item The model introduces more capacity than the signal really requires.
+\end{itemize}
+
+When the problem is this smooth, a classical recurrent model without a very careful formulation tends to overfit or inject noise where a linear law was already sufficient.
+
+\subsubsection{Observed result}
+The measured result was clearly worse than the baseline:
+
+\begin{itemize}
+    \item \textbf{Surface MSE}: 0.0000461192
+    \item \textbf{Surface $\Rtwo$}: 0.9949178533
+\end{itemize}
+
+This result shows that a more complex network does not necessarily imply better prediction in this problem.
+
+% ------------------------------------------------------------------
+\subsection{Gradient boosting classical models}
+
+The repository includes \texttt{src/models/classical/xgboost\_model.py}, intended to use \texttt{XGBoost} and \texttt{LightGBM}. This family makes technical sense because:
+
+\begin{itemize}
+    \item It can model nonlinear relationships without deep recurrent sequences.
+    \item It often works well on medium-sized datasets.
+    \item It is usually more robust than a deep network when the number of observations is limited.
+\end{itemize}
+
+However, in the benchmarking environment used during the exploration, this family could not always be executed homogeneously due to dependency and environment consistency issues. As a result, there is no final consolidated metric for this family in the main comparison under the current repository state.
+
+The proper conclusion here is not that the approach is invalid, but that it is not one of the models currently consolidated as a quantitative reference in the project.
+
+% ------------------------------------------------------------------
+\subsection{Improved classical approach (historical internal result): Delta Ridge}
+
+During internal research, a stronger classical variant was developed, although it was not ultimately left on the main branch. It was based on a simple but important idea: instead of predicting the next level, predict the \textbf{delta} of the next state in PCA space.
+
+Its scheme was:
+
+\[
+\text{Surface} \rightarrow \text{Scaler} \rightarrow \text{PCA} \rightarrow \text{Short windows} \rightarrow \text{Ridge on }\Delta
+\]
+
+This change greatly improves alignment with a near-persistence process, because the model no longer has to relearn the level, only the correction over the last state.
+
+\subsubsection{Historical observed result}
+In internal tests, this model obtained:
+
+\begin{itemize}
+    \item \textbf{Factor MSE}: 1.2750154847
+    \item \textbf{Surface MSE}: 0.0000129376
+    \item \textbf{Surface $\Rtwo$}: 0.9985704960
+\end{itemize}
+
+This point was especially important because it showed that a classical approach could still outperform the original baseline by a wide margin while remaining very competitive against more complex quantum variants.
+
+\subsubsection{Interpretation}
+Note that the \textit{Factor MSE} worsens relative to the baseline, but the \textit{Surface MSE} improves. This confirms that, in this problem, the critical metric is the final reconstructed surface, not just accuracy in latent factor space.
+
+% ------------------------------------------------------------------
+\section{Quantum and hybrid models}
+
+\subsection{Photonic quantum reservoir with classical readout}
+
+The model defined in \texttt{src/models/quantum/reservoir.py}, supported by \texttt{src/models/quantum/circuits.py}, is the version closest to the classical \textit{Quantum Reservoir Computing} (QRC) concept associated with Quandela.
+
+\subsubsection{Architecture}
+The pipeline is:
+
+\[
+\text{PCA window} \rightarrow \text{Encoding} \rightarrow \text{Photonic Circuit (fixed)} \rightarrow \text{Fock Probabilities} \rightarrow \text{Ridge}
+\]
+
+The quantum block is kept \textbf{fixed}. Circuit parameters are not trained; only the final classical readout is learned.
+
+\subsubsection{What the reservoir does}
+The circuit generates a nonlinear transformation of the input through:
+
+\begin{itemize}
+    \item \textit{Beam splitters}
+    \item \textit{Phase shifters}
+    \item \textbf{Phase encoding} of the input on selected modes
+    \item Measurement as a probability distribution in Fock space
+\end{itemize}
+
+From a modeling perspective, the output of this block is a high-dimensional feature map.
+
+\subsubsection{Technical relevance}
+This architecture is highly defensible for the hackathon because:
+
+\begin{itemize}
+    \item It aligns with the real QRC paradigm.
+    \item It clearly separates the fixed quantum part and the trainable classical part.
+    \item It provides a very clean \textit{photonic reservoir computing} narrative.
+\end{itemize}
+
+\subsubsection{Current status}
+Although conceptually important, it was not the most practical model for continuous benchmarking, because it depends on a more delicate environment (\texttt{merlin}, \texttt{perceval}) and is not the model that remained as the default benchmark on the main branch.
+
+% ------------------------------------------------------------------
+\subsection{Main hybrid model on the main branch: Quantum-Inspired Reservoir + LSTM}
+
+The most important operational model in the repository is defined in \texttt{src/models/quantum/quantum\_reservoir\_lstm.py}. This is the most stable, reproducible, and directly benchmarked quantum/hybrid model.
+
+\subsubsection{Architecture}
+The exact chain is:
+
+\[
+\Surface
+\rightarrow
+\text{StandardScaler}
+\rightarrow
+\text{PCA}(12)
+\rightarrow
+\text{Quantum-Inspired Reservoir}
+\rightarrow
+\text{LSTM}
+\rightarrow
+\widehat{\Delta \text{Factors}}
+\rightarrow
+\hSurface
+\]
+
+\subsubsection{Functional decomposition}
+The model is divided into three blocks:
+
+\paragraph{1. Latent compression}
+The original surface is normalized and reduced to 12 principal components. This filters noise and concentrates the relevant dynamics.
+
+\paragraph{2. Fixed quantum-inspired reservoir}
+Each temporal window of factors passes through a non-trainable reservoir that implements:
+
+\begin{itemize}
+    \item Random projection of the input.
+    \item Internal \textit{angle encoding} through sine and cosine functions.
+    \item Nonlinear mixing with a local interaction term.
+    \item Fixed recurrence with controlled spectral radius.
+    \item Integration with a leakage parameter.
+\end{itemize}
+
+This reservoir is not a real quantum circuit, but it mimics the logic of a nonlinear feature map inspired by quantum reservoirs.
+
+\paragraph{3. Trainable temporal readout}
+The reservoir states feed an \texttt{LSTM} that outputs the delta of the next latent state. The choice to predict the delta, rather than the level, is important because the problem is highly persistent.
+
+\subsubsection{Strengths}
+This design achieves a very useful balance:
+
+\begin{itemize}
+    \item It has a credible quantum narrative.
+    \item It does not require a real quantum backend.
+    \item It can be trained with standard \texttt{torch}.
+    \item It can be compared stably with the classical baseline.
+\end{itemize}
+
+\subsubsection{Observed result}
+In the consolidated evaluation of the project, this model obtained:
+
+\begin{itemize}
+    \item \textbf{Factor MSE}: 0.6453511613
+    \item \textbf{Surface MSE}: 0.0000132257
+\end{itemize}
+
+Compared with the original baseline:
+
+\[
+\text{Relative improvement} =
+\frac{0.0000144493 - 0.0000132257}{0.0000144493}
+\approx 8.47\%
+\]
+
+Therefore, the hybrid model improves over the notebook baseline in a real and consistent way.
+
+% ------------------------------------------------------------------
+\subsection{Conceptual comparison: why this model improves}
+
+The key point is not only that the model uses an \texttt{LSTM}, but that it applies a \textbf{structured nonlinear transformation upstream} of the recurrent readout. Instead of forcing the \texttt{LSTM} to learn all the complexity directly from PCA factors, it receives a sequence already enriched by the reservoir.
+
+This reduces the burden on the readout and resembles the philosophy of \textit{reservoir computing}: delegate representation expansion to the reservoir and let the trainable block learn a simpler temporal projection.
+
+However, the improvement is not huge. The reason is that the dataset is so persistent that even simple one-step persistence is already a very strong baseline. Therefore, the reservoir and the \texttt{LSTM} can only capture a fine correction on top of a problem that is already almost solved by a simple benchmark.
+
+% ------------------------------------------------------------------
+\subsection{Quantum autoencoder}
+
+The file \texttt{src/models/quantum/autoencoder.py} introduces a different idea: using a classical pre-compression stage and a trainable quantum bottleneck. The general structure is:
+
+\[
+\text{Surface} \rightarrow \text{Classical Encoder} \rightarrow \text{Quantum Bottleneck} \rightarrow \text{Classical Decoder}
+\]
+
+This line is interesting because it shifts the quantum component from temporal modeling toward representation compression. Instead of using the circuit as a forecasting reservoir, it uses it as a structured compressor.
+
+From a research standpoint, this is valuable because it explores quantum utility in representation, not only in dynamics. However, it is not the central model on which the main benchmarked results of the current project state are based.
+
+% ------------------------------------------------------------------
+\subsection{Quantum kernel Gaussian Process}
+
+The line in \texttt{src/models/quantum/quantum\_kernel\_gp.py} follows another philosophy: instead of constructing a reservoir, it constructs a quantum kernel that induces a notion of similarity between observations.
+
+Conceptually, this family seeks to:
+
+\begin{itemize}
+    \item Replace an explicit linear basis with geometry induced by a quantum feature map.
+    \item Exploit the expressivity of the circuit-induced feature space.
+\end{itemize}
+
+Although this line is methodologically solid and relevant as part of the repository’s model repertoire, it is not part of the main benchmark with consolidated metrics in the current comparison.
+
+% ------------------------------------------------------------------
+\subsection{Quantum transformers and advanced photonic models}
+
+The repository also includes several more exploratory modules:
+
+\begin{itemize}
+    \item \texttt{QT\_QRC\_PHOTONIC.py}
+    \item \texttt{QuantumTransformerBasic.py}
+    \item \texttt{QuantumTransformerEncoderReservoirVarQITE-SVD.py}
+\end{itemize}
+
+These implementations aim to combine quantum encoding, attention, or more advanced variational blocks. From a research narrative standpoint, they demonstrate breadth and technical ambition. From the standpoint of consolidated results, they are not the central models on which the main quantitative comparison has been structured.
+
+Their value in this report is therefore contextual: they broaden the quantum exploration space of the project, but they do not define the repository’s operational benchmark in its current state.
+
+% ------------------------------------------------------------------
+\section{Consolidated comparative results}
+
+This section summarizes the most relevant quantitative results obtained during the exploration and execution of the repository.
+
+\subsection{Main comparison table}
+
+\begin{table}[H]
+\centering
+\caption{Comparison of models with consolidated or historically measured quantitative results.}
+\rowcolors{2}{TableGray}{white}
+\begin{tabularx}{\textwidth}{Y c c c}
+\toprule
+\textbf{Model} & \textbf{Factor MSE} & \textbf{Surface MSE} & \textbf{Project status} \\
+\midrule
+Notebook baseline (PCA + Ridge) & 0.7360304829 & 0.0000144493 & Main reference \\
+Modular Ridge (baseline replica) & --- & 0.0000144493 & Reproduced in \texttt{src/models/classical} \\
+Classical LSTM & --- & 0.0000461192 & Inferior, not competitive \\
+Classical Delta Ridge (historical internal) & 1.2750154847 & 0.0000129376 & Strongest classical model observed \\
+Quantum-Inspired Reservoir + LSTM (current in \texttt{main}) & 0.6453511613 & 0.0000132257 & Best consolidated hybrid in \texttt{main} \\
+\best{PCA(20) + Bosonic Reservoir + GRU} & --- & \best{0.0000127598} & Best internal experimental result \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{How to read the table}
+The table above supports several robust conclusions:
+
+\begin{enumerate}[label=\arabic*.]
+    \item The original classical baseline is reasonable, but it is not the best observed model.
+    \item A pure classical \texttt{LSTM}, without a carefully adapted formulation, performs clearly worse.
+    \item The \textit{quantum-inspired reservoir + LSTM} hybrid improves over the original baseline consistently.
+    \item The best absolute result observed during research is not the current default configuration, but a more finely tuned hybrid variant.
+    \item The best strong classical model remains extremely competitive.
+\end{enumerate}
+
+% ------------------------------------------------------------------
+\section{Deep interpretation of results}
+
+\subsection{Why the classical baseline remains so strong}
+
+The central reason is the structure of the dataset. All empirical evidence accumulated during the analysis points to:
+
+\begin{itemize}
+    \item High autocorrelation in levels.
+    \item Small day-to-day changes relative to the average level.
+    \item Low effective dimensionality.
+    \item Behavior very close to a latent \textit{random walk}.
+\end{itemize}
+
+In such a setting, the most successful models are not necessarily the most complex, but those that best model a \textbf{small correction} on top of an almost-persistent dynamic.
+
+That explains why \textit{Delta Ridge} works so well: its inductive bias is highly aligned with the statistical structure of the problem.
+
+\subsection{Why the hybrid quantum model improves over the original baseline}
+
+The main hybrid improves over the baseline for two reasons:
+
+\begin{enumerate}[label=\arabic*.]
+    \item The reservoir generates a nonlinear expansion of the latent sequences.
+    \item The \texttt{LSTM} learns the future delta in a transformed and more expressive space.
+\end{enumerate}
+
+This design is better than the original baseline because the linear baseline does not exploit any nonlinear expansion and, additionally, it was formulated with a window and dynamic that were less appropriate for the true statistical behavior of the dataset.
+
+\subsection{Why the room for improvement is limited}
+
+Although the improvement exists, the margin is narrow. This does not mean the hybrid fails; it means the problem is already near the ceiling imposed by a very persistent series.
+
+When simple persistence already produces very low errors, any additional model can only capture:
+
+\begin{itemize}
+    \item very small nonlinear structures,
+    \item weak local corrections,
+    \item slight deviations from the martingale / latent random-walk behavior.
+\end{itemize}
+
+For that reason, even an improvement on the order of 8\% to 12\% in \textit{Surface MSE} over the original baseline is technically meaningful.
+
+% ------------------------------------------------------------------
+\section{Specific discussion: classical versus quantum}
+
+\subsection{An honest reading of the comparison}
+
+The current state of the project does not allow the claim that ``the quantum approach broadly beats the classical one.'' That statement would be technically incorrect. What can be stated, precisely, is the following:
+
+\begin{itemize}
+    \item The main quantum/hybrid approach clearly improves over the original classical notebook baseline.
+    \item The strongest classical model remains extremely competitive.
+    \item The best experimental result observed during research is also hybrid, but its advantage over the best classical result is small.
+\end{itemize}
+
+This is a much more solid and defensible interpretation.
+
+\subsection{What the quantum part really contributes}
+
+The quantum part of the repository adds value on three levels:
+
+\paragraph{1. Methodological value}
+It introduces reservoirs, feature maps, and photonic circuits as alternatives to purely classical transformations.
+
+\paragraph{2. Exploratory value}
+It opens several research routes: fixed reservoirs, quantum autoencoders, quantum kernels, and experimental transformers.
+
+\paragraph{3. Competitive value}
+In some configurations, especially with more expressive reservoirs, the hybrid approach reaches or slightly exceeds the best classical methods observed.
+
+\subsection{What should not be claimed}
+It would not be correct to present the repository as a demonstration of quantum supremacy in swaption forecasting. The real value of the project lies in showing:
+
+\begin{itemize}
+    \item that quantum and hybrid techniques can be competitive,
+    \item that their performance is reasonable and measurable,
+    \item and that the quantum reservoir design space offers a genuine direction for improvement, even if the gains are incremental.
+\end{itemize}
+
+% ------------------------------------------------------------------
+\section{Best-performing model and operational recommendation}
+
+From the standpoint of repository stability, the model that should be highlighted as the \textbf{main operational model} is:
+
+\[
+\textbf{PCA + Quantum-Inspired Reservoir + LSTM}
+\]
+
+because:
+
+\begin{itemize}
+    \item It is implemented in modular form.
+    \item It has its own evaluation runner.
+    \item It is reproducible without requiring a real quantum backend.
+    \item It improves over the original classical baseline.
+    \item It reflects the scientific objective of the project well.
+\end{itemize}
+
+From the standpoint of the \textbf{best observed result}, the technical recommendation is to highlight as the \textit{best experimental point}:
+
+\[
+\textbf{PCA(20) + Bosonic Reservoir + GRU}
+\]
+
+since it achieved the lowest \textit{Surface MSE} observed during the internal research stage.
+
+The correct way to present both is:
+
+\begin{itemize}
+    \item \textbf{Repository’s consolidated model}: Quantum-Inspired Reservoir + LSTM.
+    \item \textbf{Best experimental configuration observed}: refined hybrid variant with a bosonic reservoir and \texttt{GRU}.
+\end{itemize}
+
+% ------------------------------------------------------------------
+\section{Conclusions}
+
+At the level of models and results, the repository shows a clear and coherent technical progression. The comparison starts from a simple and reasonable classical baseline (PCA + Ridge), moves through more complex classical models that do not necessarily improve performance, and reaches a quantum-classical hybrid family that does achieve a real and stable improvement over the initial reference.
+
+The main conclusion is that model design must respect the nature of the dataset. Since the problem is strongly persistent and of low effective dimensionality, the best models are not those with the greatest raw complexity, but those that combine:
+
+\begin{itemize}
+    \item a good surface compression strategy,
+    \item a useful but controlled nonlinear transformation,
+    \item and a transition law that learns small corrections over an almost-persistent dynamic.
+\end{itemize}
+
+Under that criterion, the project has already produced three solid findings:
+
+\begin{enumerate}[label=\arabic*.]
+    \item The original baseline can be improved consistently.
+    \item A \textit{quantum-inspired reservoir + LSTM} hybrid is a serious and defensible solution.
+    \item Additional room for improvement exists, but it is incremental and depends more on better reservoir design than on larger networks.
+\end{enumerate}
+
+In summary, the repository does not merely contain diverse models: it contains a well-defined technical story. That story is the transition from a competitive linear baseline to a hybrid family that delivers measurable improvement, together with an honest interpretation of its limits and a solid basis for future iterations.
+
+% ------------------------------------------------------------------
+\section*{Appendix A: Executive summary of metrics}
+
+\begin{table}[H]
+\centering
+\caption{Executive summary of key metrics for presentation purposes.}
+\rowcolors{2}{TableGray}{white}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Comparison} & \textbf{Initial Surface MSE} & \textbf{Final Surface MSE} \\
+\midrule
+Original baseline $\rightarrow$ current QR+LSTM & 0.0000144493 & 0.0000132257 \\
+Original baseline $\rightarrow$ strongest classical model & 0.0000144493 & 0.0000129376 \\
+Original baseline $\rightarrow$ best experimental hybrid & 0.0000144493 & 0.0000127598 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The corresponding relative improvements are approximately:
+
+\begin{itemize}
+    \item \textbf{8.47\%} for the current QR+LSTM relative to the baseline.
+    \item \textbf{10.46\%} for the strongest classical model relative to the baseline.
+    \item \textbf{11.69\%} for the best experimental hybrid relative to the baseline.
+\end{itemize}
+
+% ------------------------------------------------------------------
+\section*{Appendix B: Recommended wording for presenting the work}
+
+If this document is used as the basis for a report or presentation, the most rigorous and convincing wording is:
+
+\begin{quote}
+``The project evaluates a family of classical and quantum-classical hybrid models for swaption surface forecasting. The linear PCA + Ridge baseline provides a strong reference. On top of that, the main hybrid model in the repository, based on a fixed \textit{quantum-inspired} reservoir and an \texttt{LSTM} readout, reduces surface error by approximately 8.5\%. In internal research, more refined hybrid configurations with bosonic reservoirs and \texttt{GRU} readouts achieved reductions above 11\%. However, the problem is highly persistent and of low effective dimensionality, which explains why the best models only improve moderately over very simple baselines that are already well aligned with the dataset’s structure.''
+\end{quote}
+
+\end{document}
